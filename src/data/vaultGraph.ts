@@ -138,6 +138,31 @@ function scoreNodeImportance(path: string, maps: DegreeMaps): number {
   return Math.min(6, 2 + Math.log2(base + 1));
 }
 
+function extractTags(cache: CachedMetadata | null): string[] {
+  if (!cache) return [];
+  const tags = new Set<string>();
+
+  // Extract from frontmatter tags
+  if (cache.frontmatter?.tags) {
+    const fmTags = cache.frontmatter.tags;
+    if (Array.isArray(fmTags)) {
+      fmTags.forEach(tag => tags.add(String(tag).toLowerCase()));
+    } else if (typeof fmTags === 'string') {
+      tags.add(fmTags.toLowerCase());
+    }
+  }
+
+  // Extract from inline tags
+  if (cache.tags) {
+    cache.tags.forEach(tagInfo => {
+      const tag = tagInfo.tag.replace(/^#/, '').toLowerCase();
+      tags.add(tag);
+    });
+  }
+
+  return Array.from(tags);
+}
+
 function gatherGlobalFiles(app: App, includeCanvas: boolean, maxNodes: number): TFile[] {
   const markdown = app.vault.getMarkdownFiles();
   const canvases = includeCanvas
@@ -239,6 +264,8 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
     const summary = await extractNoteSummary(app, file, cache);
     const { image, gallery } = gatherNodeMedia(app, file, cache);
     const importance = scoreNodeImportance(file.path, degreeMaps);
+    const tags = extractTags(cache);
+    const isMoc = tags.includes('moc');
     const nodeId = file.path;
 
     nodeIdByPath.set(file.path, nodeId);
@@ -252,6 +279,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
       size: importance * 2.5,
       imageUrl: image,
       media: gallery,
+      raw: { isMoc, tags },
     });
   }
 

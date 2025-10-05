@@ -97,6 +97,14 @@ export interface GraphBuildOptions {
   graphName?: string;
 }
 
+export interface ForceLayoutConfig {
+  iterations: number;
+  repelForce: number;
+  centerForce: number;
+  linkForce: number;
+  linkDistance: number;
+}
+
 const EDGE_TYPE_COLORS: Record<string, number> = {
   therapeutic: 0x4fc3f7,
   romantic: 0xff6f91,
@@ -164,6 +172,16 @@ const DEFAULT_LAYOUT: GraphLayoutConfig = {
 
 let currentLayoutConfig: GraphLayoutConfig = { ...DEFAULT_LAYOUT };
 
+const DEFAULT_FORCE_LAYOUT: ForceLayoutConfig = {
+  iterations: 48,
+  repelForce: 0,
+  centerForce: 0,
+  linkForce: 0,
+  linkDistance: 1.6,
+};
+
+let currentForceLayout: ForceLayoutConfig = { ...DEFAULT_FORCE_LAYOUT };
+
 export function updateLayoutConfig(config: Partial<GraphLayoutConfig> = {}): void {
   currentLayoutConfig = {
     ...currentLayoutConfig,
@@ -177,6 +195,19 @@ export function resetLayoutConfig(): void {
 
 export function getLayoutConfig(): GraphLayoutConfig {
   return { ...currentLayoutConfig };
+}
+
+export function updateForceLayoutConfig(config: Partial<ForceLayoutConfig> = {}): void {
+  currentForceLayout = {
+    ...currentForceLayout,
+    ...config,
+  };
+  if (!Number.isFinite(currentForceLayout.iterations) || currentForceLayout.iterations <= 0) {
+    currentForceLayout.iterations = DEFAULT_FORCE_LAYOUT.iterations;
+  }
+  if (!Number.isFinite(currentForceLayout.linkDistance) || currentForceLayout.linkDistance <= 0) {
+    currentForceLayout.linkDistance = DEFAULT_FORCE_LAYOUT.linkDistance;
+  }
 }
 
 function clamp01(value: number): number {
@@ -268,23 +299,38 @@ function normalizeNode(node: RawGraphNode | null | undefined, index: number): No
   const label = node.label ?? id;
   const category = node.category ?? 'uncategorized';
   const importance = Number.isFinite(node.importance) ? Number(node.importance) : null;
+
+  // Check if this is a MOC node
+  const isMoc = node.raw && typeof node.raw === 'object' && 'isMoc' in node.raw && node.raw.isMoc;
+
   const baseSize = Number.isFinite(node.size)
     ? Number(node.size)
     : (importance ? 8 + (Math.max(1, Math.min(importance, 5)) - 1) * 4 : 12);
+
+  // MOC nodes get 2x size
+  const finalSize = isMoc ? baseSize * 2 : baseSize;
+
   const summary = node.summary || node.description || '';
   const emoji = node.emoji || emojiFromCategory(category);
   const media = Array.isArray(node.media) ? node.media : [];
   const imageUrl = node.imageUrl || '';
   const thumbnailUrl = node.thumbnailUrl || '';
-  const color = Number.isFinite(node.color)
-    ? lightenColor(intToRgb(Number(node.color)))
-    : colorFromCategory(category);
+
+  // MOC nodes get a distinctive golden color
+  let color: [number, number, number];
+  if (isMoc) {
+    color = [1.0, 0.84, 0.0]; // Golden color for MOC nodes
+  } else if (Number.isFinite(node.color)) {
+    color = lightenColor(intToRgb(Number(node.color)));
+  } else {
+    color = colorFromCategory(category);
+  }
 
   return {
     id,
     label,
     category,
-    size: baseSize,
+    size: finalSize,
     importance,
     summary,
     emoji,
@@ -454,6 +500,161 @@ function buildLinks(rawLinks: NormalizedLink[], adjacency: Array<Set<number>>): 
   return { edges, linkMeta, maxLinkValue: maxLinkValue || 10 };
 }
 
+function shouldApplyForceLayout(config: ForceLayoutConfig): boolean {
+  return (
+    (config.repelForce ?? 0) > 0 ||
+    (config.centerForce ?? 0) > 0 ||
+    (config.linkForce ?? 0) > 0
+  );
+}
+
+function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, config: ForceLayoutConfig): void {
+  if (!shouldApplyForceLayout(config)) return;
+  const count = vertices.length;
+  if (count === 0) return;
+
+  const iterations = Math.min(160, Math.max(1, Math.round(config.iterations || DEFAULT_FORCE_LAYOUT.iterations)));
+  const repel = Math.max(0, config.repelForce);
+  const center = Math.max(0, config.centerForce);
+  const linkStrength = Math.max(0, config.linkForce);
+  const targetDistance = Math.max(0.05, config.linkDistance || DEFAULT_FORCE_LAYOUT.linkDistance);
+
+  const positions: Vec4[] = vertices.map((vertex) => [...vertex] as Vec4);
+  const velocities: Vec4[] = Array.from({ length: count }, () => [0, 0, 0, 0] as Vec4);
+  const forces: Vec4[] = Array.from({ length: count }, () => [0, 0, 0, 0] as Vec4);
+
+  const damping = 0.85;
+  const timeStep = 0.02;
+  const epsilon = 0.0001;
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    for (let i = 0; i < count; i += 1) {
+      const f = forces[i];
+      f[0] = 0;
+      f[1] = 0;
+      f[2] = 0;
+      f[3] = 0;
+    }
+
+    if (repel > 0) {
+      for (let i = 0; i < count; i += 1) {
+        for (let j = i + 1; j < count; j += 1) {
+          const pi = positions[i];
+          const pj = positions[j];
+          let dx = pi[0] - pj[0];
+          let dy = pi[1] - pj[1];
+          let dz = pi[2] - pj[2];
+          let dw = pi[3] - pj[3];
+          const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
+          const scale = repel / distSq;
+          dx *= scale;
+          dy *= scale;
+          dz *= scale;
+          dw *= scale;
+          forces[i][0] += dx;
+          forces[i][1] += dy;
+          forces[i][2] += dz;
+          forces[i][3] += dw;
+          forces[j][0] -= dx;
+          forces[j][1] -= dy;
+          forces[j][2] -= dz;
+          forces[j][3] -= dw;
+        }
+      }
+    }
+
+    if (center > 0) {
+      for (let i = 0; i < count; i += 1) {
+        const pos = positions[i];
+        forces[i][0] -= pos[0] * center;
+        forces[i][1] -= pos[1] * center;
+        forces[i][2] -= pos[2] * center;
+        forces[i][3] -= pos[3] * center;
+      }
+    }
+
+    if (linkStrength > 0 && edges.length > 0) {
+      for (let index = 0; index < edges.length; index += 1) {
+        const [aIndex, bIndex] = edges[index];
+        const pa = positions[aIndex];
+        const pb = positions[bIndex];
+        let dx = pb[0] - pa[0];
+        let dy = pb[1] - pa[1];
+        let dz = pb[2] - pa[2];
+        let dw = pb[3] - pa[3];
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq < epsilon) continue;
+        const dist = Math.sqrt(distSq);
+        const diff = dist - targetDistance;
+        const limitedDiff = Math.max(-targetDistance * 3, Math.min(diff, targetDistance * 3));
+        const scale = (linkStrength * limitedDiff) / dist;
+        dx *= scale;
+        dy *= scale;
+        dz *= scale;
+        dw *= scale;
+        forces[aIndex][0] += dx;
+        forces[aIndex][1] += dy;
+        forces[aIndex][2] += dz;
+        forces[aIndex][3] += dw;
+        forces[bIndex][0] -= dx;
+        forces[bIndex][1] -= dy;
+        forces[bIndex][2] -= dz;
+        forces[bIndex][3] -= dw;
+      }
+    }
+
+    for (let i = 0; i < count; i += 1) {
+      const vel = velocities[i];
+      const force = forces[i];
+      vel[0] = (vel[0] + force[0] * timeStep) * damping;
+      vel[1] = (vel[1] + force[1] * timeStep) * damping;
+      vel[2] = (vel[2] + force[2] * timeStep) * damping;
+      vel[3] = (vel[3] + force[3] * timeStep) * damping;
+      positions[i][0] += vel[0];
+      positions[i][1] += vel[1];
+      positions[i][2] += vel[2];
+      positions[i][3] += vel[3];
+    }
+  }
+
+  const centroid: Vec4 = [0, 0, 0, 0];
+  for (let i = 0; i < count; i += 1) {
+    const pos = positions[i];
+    centroid[0] += pos[0];
+    centroid[1] += pos[1];
+    centroid[2] += pos[2];
+    centroid[3] += pos[3];
+  }
+  const invCount = 1 / count;
+  centroid[0] *= invCount;
+  centroid[1] *= invCount;
+  centroid[2] *= invCount;
+  centroid[3] *= invCount;
+
+  let maxRadiusSq = 0;
+  for (let i = 0; i < count; i += 1) {
+    const pos = positions[i];
+    pos[0] -= centroid[0];
+    pos[1] -= centroid[1];
+    pos[2] -= centroid[2];
+    pos[3] -= centroid[3];
+    const radiusSq = pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2] + pos[3] * pos[3];
+    if (radiusSq > maxRadiusSq) maxRadiusSq = radiusSq;
+  }
+
+  const maxRadius = Math.sqrt(maxRadiusSq);
+  const clampRadius = 8.8;
+  const scale = maxRadius > clampRadius ? clampRadius / maxRadius : 1;
+
+  for (let i = 0; i < count; i += 1) {
+    const pos = positions[i];
+    vertices[i][0] = pos[0] * scale;
+    vertices[i][1] = pos[1] * scale;
+    vertices[i][2] = pos[2] * scale;
+    vertices[i][3] = pos[3] * scale;
+  }
+}
+
 export function buildNarrativeGraphFromData(
   data: GraphDataPayload = {},
   options: GraphBuildOptions = {}
@@ -478,30 +679,24 @@ export function buildNarrativeGraphFromData(
     .map((link) => normalizeLink(link, indexById))
     .filter((value): value is NormalizedLink => Boolean(value));
 
-  const {
-    vertices,
-    vertexColors,
-    vertexSizes,
-    nodeMeta,
-    adjacency,
-    categories,
-  } = layoutNodes(normalizedNodes);
+  const layout = layoutNodes(normalizedNodes);
+  const { edges, linkMeta, maxLinkValue } = buildLinks(normalizedLinks, layout.adjacency);
 
-  const { edges, linkMeta, maxLinkValue } = buildLinks(normalizedLinks, adjacency);
+  applyForceLayout(layout.vertices, edges, currentForceLayout);
 
   return {
     name: graphName,
-    vertices,
+    vertices: layout.vertices,
     edges,
     meta: {
       type: 'graph',
-      nodes: nodeMeta,
+      nodes: layout.nodeMeta,
       links: linkMeta,
-      categories,
-      vertexColors,
-      vertexSizes,
+      categories: layout.categories,
+      vertexColors: layout.vertexColors,
+      vertexSizes: layout.vertexSizes,
       maxLinkValue,
-      adjacency: adjacency.map((set) => Array.from(set)),
+      adjacency: layout.adjacency.map((set) => Array.from(set)),
       summary,
       query,
     },

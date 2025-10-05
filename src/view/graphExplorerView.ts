@@ -7,6 +7,8 @@ import { composeRotation, applyMatrix, type RotationAngles, type Vec4 } from '..
 import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
+import type GraphExplorerPlugin from '../main';
+import type { GraphExplorerSettings } from '../main';
 
 export const HYPER_VIEW_TYPE = 'obsidian-4d-graph-explorer';
 
@@ -22,8 +24,19 @@ interface ProjectionState {
   scaleTarget?: number;
 }
 
+type CameraPresetId = 'axial-front' | 'isometric-diagonal' | 'profile-x' | 'zenith-y';
+
+interface CameraPreset {
+  id: CameraPresetId;
+  label: string;
+  position: [number, number, number];
+  up?: [number, number, number];
+  description?: string;
+}
+
 interface CameraState {
   zoom: number;
+  preset: CameraPresetId;
 }
 
 interface GraphRenderState {
@@ -33,6 +46,7 @@ interface GraphRenderState {
   glow: number;
   pointOpacity: number;
   nodeScale: number;
+  showLinks: boolean;
   vertexVisibility?: number[] | null;
   edgeVisibility?: number[] | null;
 }
@@ -91,10 +105,39 @@ const DATASET_OPTIONS: DatasetOption[] = [
   { id: 'duocylinder', label: 'Duocylinder Lattice', type: 'shape', objectName: 'Duocylinder' },
 ];
 
-function createOption(el: HTMLSelectElement, { id, label }: { id: string; label: string }) {
+const CAMERA_PRESETS: CameraPreset[] = [
+  {
+    id: 'axial-front',
+    label: 'Axial · Facing Z',
+    position: [0, 0, 5.6],
+    description: 'Head-on perspective that keeps distances intuitive when first orienting within the graph.',
+  },
+  {
+    id: 'isometric-diagonal',
+    label: 'Isometric · XYZ',
+    position: [4.2, 3.2, 5.2],
+    description: 'Balanced diagonal framing so clusters along multiple axes stay visible at once.',
+  },
+  {
+    id: 'profile-x',
+    label: 'Profile · X-axis',
+    position: [6.4, 0.6, 0],
+    description: 'Side-on view that stretches structures projected along W, Y, and Z into focus.',
+  },
+  {
+    id: 'zenith-y',
+    label: 'Zenith · Top-down',
+    position: [0.4, 6.5, 0.2],
+    description: 'Bird’s-eye orientation to understand layers and hyperplane slices through W.',
+    up: [0, 0, 1],
+  },
+];
+
+function createOption(el: HTMLSelectElement, { id, label, title }: { id: string; label: string; title?: string }) {
   const option = document.createElement('option');
   option.value = id;
   option.textContent = label;
+  if (title) option.title = title;
   el.appendChild(option);
 }
 
@@ -120,6 +163,7 @@ function createIconButton(icon: string, onClick: () => void, options: { title?: 
 }
 
 export class GraphExplorerView extends ItemView {
+  private plugin: GraphExplorerPlugin;
   private rootEl!: HTMLDivElement;
   private canvasEl!: HTMLCanvasElement;
   private overlayEl!: HTMLDivElement;
@@ -131,6 +175,7 @@ export class GraphExplorerView extends ItemView {
   private configVisible = false;
   private datasetSelectEl!: HTMLSelectElement;
   private themeSelectEl!: HTMLSelectElement;
+  private cameraPresetSelectEl!: HTMLSelectElement;
   private zoomSliderEl!: HTMLInputElement;
   private zoomValueEl!: HTMLSpanElement;
   private autoSpeedSliderEl!: HTMLInputElement;
@@ -155,15 +200,17 @@ export class GraphExplorerView extends ItemView {
   private focusStrength = 0;
   private pendingFocusPath: string | null = null;
 
-  constructor(leaf: WorkspaceLeaf) {
+  constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
+    this.plugin = plugin;
     const activeFile = this.app.workspace.getActiveFile();
     this.selectedDataset = 'vault-local';
+    const settings = this.plugin.settings;
     this.state = {
       rotation: { xy: 0, xz: 0, xw: 0, yz: 0, yw: 0, zw: 0 },
       slice: { mode: 'projection', offset: 0, thickness: 0.24 },
       projection: { wCamera: 3.2, scale: 1.08 },
-      camera: { zoom: 1 },
+      camera: { zoom: 1, preset: 'axial-front' },
       autoRotate: false,
       autoSpeed: 0.42,
       themeId: 'neon',
@@ -173,11 +220,17 @@ export class GraphExplorerView extends ItemView {
         focusColor: [1, 1, 1],
         glow: 0.6,
         pointOpacity: 0.95,
-        nodeScale: 1.0,
+        nodeScale: settings.nodeSizeMultiplier,
+        showLinks: settings.showLinks,
       },
     };
     this.pendingFocusPath = activeFile?.path ?? null;
     this.activeObject = getNarrativeGraphObject();
+  }
+
+  applySettings(settings: GraphExplorerSettings): void {
+    this.state.graph.nodeScale = settings.nodeSizeMultiplier;
+    this.state.graph.showLinks = settings.showLinks;
   }
 
   getViewType(): string {
@@ -244,8 +297,10 @@ export class GraphExplorerView extends ItemView {
 
     this.imageStripEl = this.rootEl.createDiv({ cls: 'hyper-image-strip' });
     this.nodeInfoEl = this.rootEl.createDiv({ cls: 'hyper-node-info' });
+    this.nodeInfoEl.style.display = 'none';
 
     this.renderer = new HyperRenderer(this.canvasEl);
+    this.applyCameraPreset(this.state.camera.preset);
     this.renderer.setGraphLabelCallback((payload: GraphLabelPayload) => this.onGraphPayload(payload));
 
     this.controls = new HyperControls({
@@ -321,6 +376,24 @@ export class GraphExplorerView extends ItemView {
     this.themeSelectEl.value = this.state.themeId;
     this.themeSelectEl.addEventListener('change', () => {
       this.state.themeId = this.themeSelectEl.value;
+    });
+
+    const cameraRow = body.createDiv({ cls: 'hyper-config-row' });
+    const cameraId = `hyper-camera-${uniqueSuffix}`;
+    cameraRow.createEl('label', { text: 'Camera view', attr: { for: cameraId } });
+    this.cameraPresetSelectEl = cameraRow.createEl('select', { attr: { id: cameraId } });
+    CAMERA_PRESETS.forEach((preset) => {
+      createOption(this.cameraPresetSelectEl, {
+        id: preset.id,
+        label: preset.label,
+        title: preset.description,
+      });
+    });
+    this.cameraPresetSelectEl.value = this.state.camera.preset;
+    this.cameraPresetSelectEl.addEventListener('change', (event) => {
+      const value = (event.target as HTMLSelectElement).value as CameraPresetId;
+      this.state.camera.preset = value;
+      this.applyCameraPreset(value, { syncSelector: false });
     });
 
     const zoomRow = body.createDiv({ cls: 'hyper-config-row' });
@@ -427,6 +500,31 @@ export class GraphExplorerView extends ItemView {
     this.updateZoomDisplay();
   }
 
+  private updateNodeInfoVisibility() {
+    if (!this.nodeInfoEl) return;
+    const text = this.nodeInfoEl.textContent?.trim() ?? '';
+    const hasContent = this.nodeInfoEl.childElementCount > 0 && text.length > 0;
+    this.nodeInfoEl.style.display = hasContent ? '' : 'none';
+  }
+
+  private applyCameraPreset(presetId: CameraPresetId, options: { syncSelector?: boolean } = {}) {
+    const camera = (this.renderer as any)?.camera;
+    if (!camera) return;
+    const preset = CAMERA_PRESETS.find((item) => item.id === presetId) ?? CAMERA_PRESETS[0];
+    if (!preset) return;
+
+    const up = preset.up ?? [0, 1, 0];
+    camera.position.set(preset.position[0], preset.position[1], preset.position[2]);
+    camera.up.set(up[0], up[1], up[2]);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+
+    this.state.camera.preset = preset.id;
+    if (options.syncSelector !== false && this.cameraPresetSelectEl) {
+      this.cameraPresetSelectEl.value = preset.id;
+    }
+  }
+
   private requestRender() {
     // No-op placeholder: continuous loop handles rendering
   }
@@ -512,9 +610,11 @@ export class GraphExplorerView extends ItemView {
       if (index === null) {
         this.nodeInfoEl.empty();
         this.imageStripEl.empty();
+        this.imageStripEl.style.display = 'none';
       } else {
         this.updateNodeDetails(index);
       }
+      this.updateNodeInfoVisibility();
     }
 
     if (this.lastGraphPayload) {
@@ -588,6 +688,7 @@ export class GraphExplorerView extends ItemView {
     if (this.activeObject.meta?.type !== 'graph') {
       this.nodeInfoEl.empty();
       this.imageStripEl.empty();
+      this.imageStripEl.style.display = 'none';
       this.lastRenderedNodeSignature = null;
     }
   }
@@ -664,22 +765,27 @@ export class GraphExplorerView extends ItemView {
     const title = this.nodeInfoEl.createEl('h2');
     title.textContent = node.emoji ? `${node.emoji} ${node.label}` : node.label;
     this.nodeInfoEl.createEl('p', { text: node.summary || 'No summary available yet.' });
-    this.nodeInfoEl.createEl('p', { text: `Category: ${node.category}` });
+    const category = typeof node.category === 'string' ? node.category.trim() : '';
+    if (category && category.toLowerCase() !== 'none') {
+      this.nodeInfoEl.createEl('p', { text: category });
+    }
 
     this.imageStripEl.empty();
     const images = hero ? [hero, ...gallery.filter((url) => url !== hero)] : gallery;
 
     if (images.length === 0) {
-      this.imageStripEl.createSpan({ text: 'No media attached' });
-      return;
+      this.imageStripEl.style.display = 'none';
+    } else {
+      this.imageStripEl.style.display = '';
+      images.forEach((url) => {
+        const img = this.imageStripEl.createEl('img');
+        img.src = url;
+        img.alt = node.label;
+        img.addEventListener('error', () => img.remove());
+      });
     }
 
-    images.forEach((url) => {
-      const img = this.imageStripEl.createEl('img');
-      img.src = url;
-      img.alt = node.label;
-      img.addEventListener('error', () => img.remove());
-    });
+    this.updateNodeInfoVisibility();
   }
 
   private renderLabels(payload: GraphLabelPayload) {

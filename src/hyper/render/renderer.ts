@@ -11,10 +11,13 @@ const tempVec = new THREE.Vector3();
 
 const GRAPH_VERTEX_SHADER = `
   attribute float size;
+  attribute float intensity;
   attribute vec3 hyperColor;
   varying vec3 vColor;
+  varying float vIntensity;
   void main() {
     vColor = hyperColor;
+    vIntensity = intensity;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     float attenuation = size * (220.0 / max(0.0001, -mvPosition.z));
     gl_PointSize = clamp(attenuation, 1.0, 160.0);
@@ -24,6 +27,7 @@ const GRAPH_VERTEX_SHADER = `
 
 const GRAPH_FRAGMENT_SHADER = `
   varying vec3 vColor;
+  varying float vIntensity;
   uniform float opacity;
   uniform float glow;
   void main() {
@@ -32,7 +36,7 @@ const GRAPH_FRAGMENT_SHADER = `
     if (dist > 0.55) discard;
     float halo = smoothstep(0.55, 0.28, dist);
     float core = smoothstep(0.32, 0.0, dist);
-    float alpha = clamp(core + halo * glow, 0.0, 1.0) * opacity;
+    float alpha = clamp(core + halo * glow, 0.0, 1.0) * opacity * clamp(vIntensity, 0.05, 1.35);
     vec3 tint = mix(vColor * 0.75, vColor, core);
     gl_FragColor = vec4(tint, alpha);
   }
@@ -181,6 +185,10 @@ export class HyperRenderer {
         'size',
         new THREE.BufferAttribute(new Float32Array(vertexCount), 1),
       );
+      this.vertexGeometry.setAttribute(
+        'intensity',
+        new THREE.BufferAttribute(new Float32Array(vertexCount), 1),
+      );
     } else {
       this.vertexGeometry.setAttribute(
         'color',
@@ -310,10 +318,19 @@ export class HyperRenderer {
     const vertexColors = vertexColorAttr ? vertexColorAttr.array : null;
     const sizeAttribute = this.vertexGeometry.getAttribute('size');
     const vertexSizes = sizeAttribute ? sizeAttribute.array : null;
+    const intensityAttribute = this.vertexGeometry.getAttribute('intensity');
+    const vertexIntensity = intensityAttribute ? intensityAttribute.array : null;
     const slicePositions = this.sliceGeometry.attributes.position.array;
     const sliceColors = this.sliceGeometry.attributes.color.array;
     const shadowPositions = this.shadowGeometry.attributes.position.array;
     const shadowColors = this.shadowGeometry.attributes.color.array;
+
+    const graphShowLines = graphState?.showLinks ?? true;
+    const showLines = isGraph ? graphShowLines : true;
+
+    if (this.lines) {
+      this.lines.visible = showLines;
+    }
 
     let sliceCount = 0;
 
@@ -346,6 +363,10 @@ export class HyperRenderer {
     const vertexVisibility = isGraph && graphState?.vertexVisibility
       ? graphState.vertexVisibility
       : null;
+    const focusStrength = graphState?.focusStrength ?? 0;
+    const focusColor = graphState?.focusColor ?? null;
+
+    const sliceBand = Math.max(0.0001, sliceThickness / 2);
 
     for (let i = 0; i < vertexCount; i += 1) {
       const vec4 = vertices4d[i];
@@ -369,21 +390,42 @@ export class HyperRenderer {
         const isFocusNode = graphState?.focusNode === i;
         let finalWeight = visibilityWeight * sliceWeight;
         let sizeMultiplier = 1;
+        let colorR = baseColorR;
+        let colorG = baseColorG;
+        let colorB = baseColorB;
 
         if (isFocusNode) {
-          const pulseIntensity = 0.5 + 0.3 * Math.sin(time * 2.5);
-          finalWeight = Math.max(finalWeight, 1.4 + pulseIntensity);
-          sizeMultiplier = 1.6 + pulseIntensity * 0.4;
+          const emphasis = clamp(focusStrength, 0, 1);
+          const pulse = 0.6 + 0.4 * Math.sin(time * 1.25);
+          finalWeight = Math.max(
+            finalWeight,
+            visibilityWeight * sliceWeight * (1 + emphasis * 0.8) + emphasis * 0.25,
+          );
+          sizeMultiplier = 1 + emphasis * 0.55 + (pulse - 0.6) * 0.3 * emphasis;
+          if (focusColor) {
+            colorR = baseColorR * (1 - emphasis) + focusColor[0] * emphasis;
+            colorG = baseColorG * (1 - emphasis) + focusColor[1] * emphasis;
+            colorB = baseColorB * (1 - emphasis) + focusColor[2] * emphasis;
+          } else {
+            const brighten = 1 + emphasis * 0.4;
+            colorR *= brighten;
+            colorG *= brighten;
+            colorB *= brighten;
+          }
+          finalWeight *= 0.9 + pulse * 0.4 * emphasis;
         }
 
-        vertexColors[baseIndex] = baseColorR * finalWeight;
-        vertexColors[baseIndex + 1] = baseColorG * finalWeight;
-        vertexColors[baseIndex + 2] = baseColorB * finalWeight;
+        vertexColors[baseIndex] = colorR * finalWeight;
+        vertexColors[baseIndex + 1] = colorG * finalWeight;
+        vertexColors[baseIndex + 2] = colorB * finalWeight;
         if (vertexSizes) {
           const baseSize = graphMeta.vertexSizes[i];
           const scale = graphState?.nodeScale ?? 1;
           const visibilityScale = Math.max(0.4, 0.6 + 0.4 * visibilityWeight);
           vertexSizes[i] = baseSize * scale * visibilityScale * sizeMultiplier;
+        }
+        if (vertexIntensity) {
+          vertexIntensity[i] = Math.min(1.35, Math.max(0.08, finalWeight));
         }
       } else if (!isGraph && vertexColors) {
         const color = theme.pointColor({ normW, depth: depthNorm });
@@ -397,7 +439,6 @@ export class HyperRenderer {
       ? graphState.edgeVisibility
       : null;
 
-    const sliceBand = Math.max(0.0001, sliceThickness / 2);
     const useSlice = sliceMode === 'hyperplane';
     const useShadow = sliceMode === 'shadow';
 
@@ -419,108 +460,125 @@ export class HyperRenderer {
       this.graphLabelPayload = null;
     }
 
-    for (let i = 0; i < this.object.edges.length; i += 1) {
-      const [aIndex, bIndex] = this.object.edges[i];
-      const a4 = vertices4d[aIndex];
-      const b4 = vertices4d[bIndex];
-      const a3 = projected[aIndex];
-      const b3 = projected[bIndex];
+    const shouldRenderEdges = showLines || useSlice || useShadow;
 
-      const normWa = (a4[3] - wMin) / wRange;
-      const normWb = (b4[3] - wMin) / wRange;
-      const depthA = (a3[2] - depthMin) / depthRange;
-      const depthB = (b3[2] - depthMin) / depthRange;
+    if (!shouldRenderEdges) {
+      this.slicePointCount = 0;
+      this.sliceGeometry.setDrawRange(0, 0);
+      this.slicePoints.visible = false;
+      this.shadowGeometry.setDrawRange(0, 0);
+      this.shadowLines.visible = false;
+      this.lineGeometry.setDrawRange(0, 0);
+    } else {
+      for (let i = 0; i < this.object.edges.length; i += 1) {
+        const [aIndex, bIndex] = this.object.edges[i];
+        const a4 = vertices4d[aIndex];
+        const b4 = vertices4d[bIndex];
+        const a3 = projected[aIndex];
+        const b3 = projected[bIndex];
 
-      if (isGraph && graphLinks) {
-        const link = graphLinks[i];
-        const visible = edgeVisibility ? edgeVisibility[i] : 1;
-        const weight = 0.25 + visible * 0.75;
-        tempColor.setRGB(link.color[0] * weight, link.color[1] * weight, link.color[2] * weight);
-        const base = lineIndex * 6;
-        positions[base] = a3[0];
-        positions[base + 1] = a3[1];
-        positions[base + 2] = a3[2];
-        positions[base + 3] = b3[0];
-        positions[base + 4] = b3[1];
-        positions[base + 5] = b3[2];
-        colors[base] = tempColor.r;
-        colors[base + 1] = tempColor.g;
-        colors[base + 2] = tempColor.b;
-        colors[base + 3] = tempColor.r;
-        colors[base + 4] = tempColor.g;
-        colors[base + 5] = tempColor.b;
-      } else if (this.theme) {
-        const colorA = this.theme.lineColor({ normW: normWa, depth: depthA });
-        const colorB = this.theme.lineColor({ normW: normWb, depth: depthB });
-        const base = lineIndex * 6;
-        positions[base] = a3[0];
-        positions[base + 1] = a3[1];
-        positions[base + 2] = a3[2];
-        positions[base + 3] = b3[0];
-        positions[base + 4] = b3[1];
-        positions[base + 5] = b3[2];
-        colors[base] = colorA[0];
-        colors[base + 1] = colorA[1];
-        colors[base + 2] = colorA[2];
-        colors[base + 3] = colorB[0];
-        colors[base + 4] = colorB[1];
-        colors[base + 5] = colorB[2];
-      }
+        const normWa = (a4[3] - wMin) / wRange;
+        const normWb = (b4[3] - wMin) / wRange;
+        const depthA = (a3[2] - depthMin) / depthRange;
+        const depthB = (b3[2] - depthMin) / depthRange;
 
-      if (useSlice || useShadow) {
-        const intersection = intersectHyperplane(a4, b4, 3, sliceOffset);
-        if (intersection) {
-          const vec3 = projectPerspective(intersection, projection);
-          if (useSlice) {
-            const base = sliceCount * 3;
-            slicePositions[base] = vec3[0];
-            slicePositions[base + 1] = vec3[1];
-            slicePositions[base + 2] = vec3[2];
-            const sliceColor = this.theme.sliceColor({
-              normW: (intersection[3] - wMin) / wRange,
-              depth: (vec3[2] - depthMin) / depthRange,
-            });
-            sliceColors[base] = sliceColor[0];
-            sliceColors[base + 1] = sliceColor[1];
-            sliceColors[base + 2] = sliceColor[2];
-            sliceCount += 1;
+        if (showLines) {
+          if (isGraph && graphLinks) {
+            const link = graphLinks[i];
+            const visible = edgeVisibility ? edgeVisibility[i] : 1;
+            const weight = 0.25 + visible * 0.75;
+            tempColor.setRGB(link.color[0] * weight, link.color[1] * weight, link.color[2] * weight);
+            const base = lineIndex * 6;
+            positions[base] = a3[0];
+            positions[base + 1] = a3[1];
+            positions[base + 2] = a3[2];
+            positions[base + 3] = b3[0];
+            positions[base + 4] = b3[1];
+            positions[base + 5] = b3[2];
+            colors[base] = tempColor.r;
+            colors[base + 1] = tempColor.g;
+            colors[base + 2] = tempColor.b;
+            colors[base + 3] = tempColor.r;
+            colors[base + 4] = tempColor.g;
+            colors[base + 5] = tempColor.b;
+          } else if (this.theme) {
+            const colorA = this.theme.lineColor({ normW: normWa, depth: depthA });
+            const colorB = this.theme.lineColor({ normW: normWb, depth: depthB });
+            const base = lineIndex * 6;
+            positions[base] = a3[0];
+            positions[base + 1] = a3[1];
+            positions[base + 2] = a3[2];
+            positions[base + 3] = b3[0];
+            positions[base + 4] = b3[1];
+            positions[base + 5] = b3[2];
+            colors[base] = colorA[0];
+            colors[base + 1] = colorA[1];
+            colors[base + 2] = colorA[2];
+            colors[base + 3] = colorB[0];
+            colors[base + 4] = colorB[1];
+            colors[base + 5] = colorB[2];
           }
-          if (useShadow) {
-            const shadowVec = [...intersection];
-            shadowVec[3] = wMin - 0.12;
-            const shadowProjected = projectPerspective(shadowVec, projection);
-            const base = shadowIndex * 6;
-            shadowPositions[base] = vec3[0];
-            shadowPositions[base + 1] = vec3[1];
-            shadowPositions[base + 2] = vec3[2];
-            shadowPositions[base + 3] = shadowProjected[0];
-            shadowPositions[base + 4] = shadowProjected[1];
-            shadowPositions[base + 5] = shadowProjected[2];
-            const shadowColor = this.theme.shadowColor({
-              normW: (intersection[3] - wMin) / wRange,
-              depth: (vec3[2] - depthMin) / depthRange,
-            });
-            shadowColors[base] = shadowColor[0];
-            shadowColors[base + 1] = shadowColor[1];
-            shadowColors[base + 2] = shadowColor[2];
-            shadowColors[base + 3] = shadowColor[0];
-            shadowColors[base + 4] = shadowColor[1];
-            shadowColors[base + 5] = shadowColor[2];
-            shadowIndex += 1;
+        }
+
+        if (useSlice || useShadow) {
+          const intersection = intersectHyperplane(a4, b4, 3, sliceOffset);
+          if (intersection) {
+            const vec3 = projectPerspective(intersection, projection);
+            if (useSlice) {
+              const base = sliceCount * 3;
+              slicePositions[base] = vec3[0];
+              slicePositions[base + 1] = vec3[1];
+              slicePositions[base + 2] = vec3[2];
+              const sliceColor = this.theme.sliceColor({
+                normW: (intersection[3] - wMin) / wRange,
+                depth: (vec3[2] - depthMin) / depthRange,
+              });
+              sliceColors[base] = sliceColor[0];
+              sliceColors[base + 1] = sliceColor[1];
+              sliceColors[base + 2] = sliceColor[2];
+              sliceCount += 1;
+            }
+            if (useShadow) {
+              const shadowVec = [...intersection];
+              shadowVec[3] = wMin - 0.12;
+              const shadowProjected = projectPerspective(shadowVec, projection);
+              const base = shadowIndex * 6;
+              shadowPositions[base] = vec3[0];
+              shadowPositions[base + 1] = vec3[1];
+              shadowPositions[base + 2] = vec3[2];
+              shadowPositions[base + 3] = shadowProjected[0];
+              shadowPositions[base + 4] = shadowProjected[1];
+              shadowPositions[base + 5] = shadowProjected[2];
+              const shadowColor = this.theme.shadowColor({
+                normW: (intersection[3] - wMin) / wRange,
+                depth: (vec3[2] - depthMin) / depthRange,
+              });
+              shadowColors[base] = shadowColor[0];
+              shadowColors[base + 1] = shadowColor[1];
+              shadowColors[base + 2] = shadowColor[2];
+              shadowColors[base + 3] = shadowColor[0];
+              shadowColors[base + 4] = shadowColor[1];
+              shadowColors[base + 5] = shadowColor[2];
+              shadowIndex += 1;
+            }
           }
+        }
+
+        if (showLines) {
+          lineIndex += 1;
         }
       }
 
-      lineIndex += 1;
+      this.slicePointCount = sliceCount;
+
+      this.sliceGeometry.setDrawRange(0, sliceCount);
+      this.slicePoints.visible = useSlice && sliceCount > 0;
+
+      this.shadowGeometry.setDrawRange(0, shadowIndex * 2);
+      this.shadowLines.visible = showLines && useShadow && shadowIndex > 0;
+
+      this.lineGeometry.setDrawRange(0, showLines ? lineIndex * 2 : 0);
     }
-
-    this.slicePointCount = sliceCount;
-
-    this.sliceGeometry.setDrawRange(0, sliceCount);
-    this.slicePoints.visible = useSlice && sliceCount > 0;
-
-    this.shadowGeometry.setDrawRange(0, shadowIndex * 2);
-    this.shadowLines.visible = useShadow && shadowIndex > 0;
 
     this.lineGeometry.attributes.position.needsUpdate = true;
     this.lineGeometry.attributes.color.needsUpdate = true;
@@ -530,6 +588,9 @@ export class HyperRenderer {
     }
     if (sizeAttribute) {
       sizeAttribute.needsUpdate = true;
+    }
+    if (intensityAttribute) {
+      intensityAttribute.needsUpdate = true;
     }
     this.sliceGeometry.attributes.position.needsUpdate = true;
     this.sliceGeometry.attributes.color.needsUpdate = true;
