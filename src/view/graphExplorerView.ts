@@ -1,4 +1,4 @@
-import { ItemView, Notice, WorkspaceLeaf, TFile } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
 import { Vector3 } from 'three';
 import { HyperRenderer } from '../hyper/render/renderer';
 import { HyperControls } from '../hyper/controls/controls';
@@ -28,6 +28,8 @@ interface CameraState {
 
 interface GraphRenderState {
   focusNode: number | null;
+  focusStrength: number;
+  focusColor: [number, number, number];
   glow: number;
   pointOpacity: number;
   nodeScale: number;
@@ -98,9 +100,22 @@ function createOption(el: HTMLSelectElement, { id, label }: { id: string; label:
 
 function createButton(label: string, onClick: () => void, title?: string): HTMLButtonElement {
   const button = document.createElement('button');
+  button.type = 'button';
   button.textContent = label;
   if (title) button.title = title;
   button.addEventListener('click', onClick);
+  return button;
+}
+
+function createIconButton(icon: string, onClick: () => void, options: { title?: string; ariaLabel?: string } = {}): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.classList.add('hyper-icon-button');
+  if (options.title) button.title = options.title;
+  if (options.ariaLabel) button.setAttribute('aria-label', options.ariaLabel);
+  else if (options.title) button.setAttribute('aria-label', options.title);
+  button.addEventListener('click', onClick);
+  setIcon(button, icon);
   return button;
 }
 
@@ -112,6 +127,17 @@ export class GraphExplorerView extends ItemView {
   private labelElements: HTMLDivElement[] = [];
   private toolbarEl!: HTMLDivElement;
   private statusEl!: HTMLSpanElement;
+  private configPanelEl!: HTMLDivElement;
+  private configVisible = false;
+  private datasetSelectEl!: HTMLSelectElement;
+  private themeSelectEl!: HTMLSelectElement;
+  private zoomSliderEl!: HTMLInputElement;
+  private zoomValueEl!: HTMLSpanElement;
+  private autoSpeedSliderEl!: HTMLInputElement;
+  private autoSpeedValueEl!: HTMLSpanElement;
+  private configToggleBtn!: HTMLButtonElement;
+  private refreshBtn!: HTMLButtonElement;
+  private autoRotateBtn!: HTMLButtonElement;
   private nodeInfoEl!: HTMLDivElement;
   private imageStripEl!: HTMLDivElement;
   private renderer!: HyperRenderer;
@@ -126,21 +152,31 @@ export class GraphExplorerView extends ItemView {
   private lastRenderedNodeSignature: string | null = null;
   private tempVec = new Vector3();
   private themeCycle = themeList();
+  private focusStrength = 0;
+  private pendingFocusPath: string | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
-    const hasActiveFile = Boolean(this.app.workspace.getActiveFile());
-    this.selectedDataset = hasActiveFile ? 'vault-local' : 'vault-global';
+    const activeFile = this.app.workspace.getActiveFile();
+    this.selectedDataset = 'vault-local';
     this.state = {
       rotation: { xy: 0, xz: 0, xw: 0, yz: 0, yw: 0, zw: 0 },
       slice: { mode: 'projection', offset: 0, thickness: 0.24 },
       projection: { wCamera: 3.2, scale: 1.08 },
       camera: { zoom: 1 },
-      autoRotate: true,
-      autoSpeed: 0.85,
+      autoRotate: false,
+      autoSpeed: 0.42,
       themeId: 'neon',
-      graph: { focusNode: null, glow: 0.6, pointOpacity: 0.95, nodeScale: 1.0 },
+      graph: {
+        focusNode: null,
+        focusStrength: 0,
+        focusColor: [1, 1, 1],
+        glow: 0.6,
+        pointOpacity: 0.95,
+        nodeScale: 1.0,
+      },
     };
+    this.pendingFocusPath = activeFile?.path ?? null;
     this.activeObject = getNarrativeGraphObject();
   }
 
@@ -166,30 +202,21 @@ export class GraphExplorerView extends ItemView {
     this.toolbarEl = this.rootEl.createDiv({ cls: 'hyper-toolbar' });
     this.statusEl = this.toolbarEl.createEl('span', { text: 'Loading…' });
 
-    const datasetSelect = this.toolbarEl.createEl('select');
-    DATASET_OPTIONS.forEach((option) => createOption(datasetSelect, option));
-    datasetSelect.value = this.selectedDataset;
-    datasetSelect.addEventListener('change', async (event) => {
-      const value = (event.target as HTMLSelectElement).value;
-      this.selectedDataset = value;
-      await this.loadSelectedDataset();
-    });
+    this.toolbarEl.createDiv({ cls: 'hyper-toolbar-spacer' });
 
-    const themeSelect = this.toolbarEl.createEl('select');
-    this.themeCycle.forEach((theme) => createOption(themeSelect, { id: theme.id, label: theme.name }));
-    themeSelect.value = this.state.themeId;
-    themeSelect.addEventListener('change', () => {
-      this.state.themeId = themeSelect.value;
-    });
-
-    const refreshBtn = createButton('Refresh Graph', () => {
+    this.refreshBtn = createIconButton('refresh-cw', () => {
       void this.loadSelectedDataset(true);
-    }, 'Rebuilds the current vault graph dataset');
+    }, {
+      title: 'Refresh graph dataset',
+      ariaLabel: 'Refresh graph dataset',
+    });
 
-    const autoBtn = createButton('Pause Spin', () => {
-      this.state.autoRotate = !this.state.autoRotate;
-      autoBtn.textContent = this.state.autoRotate ? 'Pause Spin' : 'Resume Spin';
-    }, 'Toggle automatic 4D rotation');
+    this.autoRotateBtn = createIconButton('play', () => {
+      this.toggleAutoRotate();
+    }, {
+      title: 'Toggle auto rotation',
+      ariaLabel: 'Toggle auto rotation',
+    });
 
     const sliceBtn = createButton('Slice', () => {
       const order: Array<SliceState['mode']> = ['projection', 'hyperplane', 'shadow'];
@@ -198,11 +225,22 @@ export class GraphExplorerView extends ItemView {
       this.showStatus(`Slice mode: ${this.state.slice.mode}`);
     }, 'Cycle through projection / hyperplane / shadow views');
 
-    this.toolbarEl.appendChild(datasetSelect);
-    this.toolbarEl.appendChild(themeSelect);
-    this.toolbarEl.appendChild(refreshBtn);
-    this.toolbarEl.appendChild(autoBtn);
+    this.configToggleBtn = createIconButton('settings', () => {
+      this.toggleConfigPanel();
+    }, {
+      title: 'Open graph settings',
+      ariaLabel: 'Open graph settings',
+    });
+
+    this.toolbarEl.appendChild(this.refreshBtn);
+    this.toolbarEl.appendChild(this.autoRotateBtn);
     this.toolbarEl.appendChild(sliceBtn);
+    this.toolbarEl.appendChild(this.configToggleBtn);
+
+    this.buildConfigPanel();
+    this.updateAutoRotateButton();
+    this.updateZoomDisplay();
+    this.updateSpeedDisplay();
 
     this.imageStripEl = this.rootEl.createDiv({ cls: 'hyper-image-strip' });
     this.nodeInfoEl = this.rootEl.createDiv({ cls: 'hyper-node-info' });
@@ -216,7 +254,10 @@ export class GraphExplorerView extends ItemView {
       callbacks: {
         rotation: () => this.requestRender(),
         slice: () => this.requestRender(),
-        autorotate: () => this.requestRender(),
+        autorotate: () => {
+          this.updateAutoRotateButton();
+          this.requestRender();
+        },
         zoom: () => this.updateCameraZoom(),
       },
     });
@@ -233,6 +274,7 @@ export class GraphExplorerView extends ItemView {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+    this.toggleConfigPanel(false);
     this.controls?.dispose();
     this.renderer?.dispose();
   }
@@ -243,11 +285,146 @@ export class GraphExplorerView extends ItemView {
     }
   }
 
+  private buildConfigPanel() {
+    this.configPanelEl = this.rootEl.createDiv({ cls: 'hyper-config-panel', attr: { 'aria-hidden': 'true' } });
+
+    const header = this.configPanelEl.createDiv({ cls: 'hyper-config-header' });
+    header.createEl('h3', { text: 'Explorer Settings' });
+    const closeBtn = createIconButton('x', () => {
+      this.toggleConfigPanel(false);
+    }, {
+      title: 'Close settings',
+      ariaLabel: 'Close settings panel',
+    });
+    header.appendChild(closeBtn);
+
+    const body = this.configPanelEl.createDiv({ cls: 'hyper-config-body' });
+    const uniqueSuffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const datasetRow = body.createDiv({ cls: 'hyper-config-row' });
+    const datasetId = `hyper-dataset-${uniqueSuffix}`;
+    datasetRow.createEl('label', { text: 'Dataset', attr: { for: datasetId } });
+    this.datasetSelectEl = datasetRow.createEl('select', { attr: { id: datasetId } });
+    DATASET_OPTIONS.forEach((option) => createOption(this.datasetSelectEl, option));
+    this.datasetSelectEl.value = this.selectedDataset;
+    this.datasetSelectEl.addEventListener('change', (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      this.selectedDataset = value;
+      void this.loadSelectedDataset();
+    });
+
+    const themeRow = body.createDiv({ cls: 'hyper-config-row' });
+    const themeId = `hyper-theme-${uniqueSuffix}`;
+    themeRow.createEl('label', { text: 'Theme', attr: { for: themeId } });
+    this.themeSelectEl = themeRow.createEl('select', { attr: { id: themeId } });
+    this.themeCycle.forEach((theme) => createOption(this.themeSelectEl, { id: theme.id, label: theme.name }));
+    this.themeSelectEl.value = this.state.themeId;
+    this.themeSelectEl.addEventListener('change', () => {
+      this.state.themeId = this.themeSelectEl.value;
+    });
+
+    const zoomRow = body.createDiv({ cls: 'hyper-config-row' });
+    const zoomId = `hyper-zoom-${uniqueSuffix}`;
+    zoomRow.createEl('label', { text: 'Zoom level', attr: { for: zoomId } });
+    const zoomControl = zoomRow.createDiv({ cls: 'hyper-config-control' });
+    this.zoomSliderEl = zoomControl.createEl('input', {
+      attr: {
+        id: zoomId,
+        type: 'range',
+        min: '0.4',
+        max: '8',
+        step: '0.01',
+        value: this.state.camera.zoom.toFixed(2),
+      },
+    });
+    this.zoomSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.state.camera.zoom = value;
+      this.updateCameraZoom();
+      this.updateZoomDisplay();
+    });
+    this.zoomValueEl = zoomControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const speedRow = body.createDiv({ cls: 'hyper-config-row' });
+    const speedId = `hyper-speed-${uniqueSuffix}`;
+    speedRow.createEl('label', { text: 'Spin speed', attr: { for: speedId } });
+    const speedControl = speedRow.createDiv({ cls: 'hyper-config-control' });
+    this.autoSpeedSliderEl = speedControl.createEl('input', {
+      attr: {
+        id: speedId,
+        type: 'range',
+        min: '0',
+        max: '1.5',
+        step: '0.01',
+        value: this.state.autoSpeed.toFixed(2),
+      },
+    });
+    this.autoSpeedSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.state.autoSpeed = value;
+      this.updateSpeedDisplay();
+    });
+    this.autoSpeedValueEl = speedControl.createEl('span', { cls: 'hyper-config-value' });
+  }
+
+  private toggleConfigPanel(force?: boolean) {
+    if (!this.configPanelEl) return;
+    if (typeof force === 'boolean') {
+      this.configVisible = force;
+    } else {
+      this.configVisible = !this.configVisible;
+    }
+    this.configPanelEl.classList.toggle('is-visible', this.configVisible);
+    this.configPanelEl.setAttribute('aria-hidden', this.configVisible ? 'false' : 'true');
+    if (this.configToggleBtn) {
+      this.configToggleBtn.classList.toggle('is-active', this.configVisible);
+    }
+    if (this.configVisible) {
+      this.updateZoomDisplay();
+      this.updateSpeedDisplay();
+    }
+  }
+
+  private toggleAutoRotate(force?: boolean) {
+    if (typeof force === 'boolean') {
+      this.state.autoRotate = force;
+    } else {
+      this.state.autoRotate = !this.state.autoRotate;
+    }
+    this.updateAutoRotateButton();
+  }
+
+  private updateAutoRotateButton() {
+    if (!this.autoRotateBtn) return;
+    const isActive = this.state.autoRotate;
+    const label = isActive ? 'Pause auto rotation' : 'Resume auto rotation';
+    setIcon(this.autoRotateBtn, isActive ? 'pause' : 'play');
+    this.autoRotateBtn.setAttribute('aria-label', label);
+    this.autoRotateBtn.title = label;
+  }
+
+  private updateZoomDisplay() {
+    if (!this.zoomSliderEl || !this.zoomValueEl) return;
+    const zoom = this.state.camera.zoom;
+    this.zoomSliderEl.value = zoom.toFixed(2);
+    this.zoomValueEl.textContent = `${zoom.toFixed(2)}x`;
+  }
+
+  private updateSpeedDisplay() {
+    if (!this.autoSpeedSliderEl || !this.autoSpeedValueEl) return;
+    const speed = this.state.autoSpeed;
+    this.autoSpeedSliderEl.value = speed.toFixed(2);
+    this.autoSpeedValueEl.textContent = `${speed.toFixed(2)}x`;
+  }
+
   private updateCameraZoom() {
     const camera = (this.renderer as any).camera;
     if (!camera) return;
     camera.zoom = this.state.camera.zoom;
     camera.updateProjectionMatrix();
+    this.updateZoomDisplay();
   }
 
   private requestRender() {
@@ -258,6 +435,8 @@ export class GraphExplorerView extends ItemView {
     const option = DATASET_OPTIONS.find((item) => item.id === this.selectedDataset) ?? DATASET_OPTIONS[0];
     try {
       this.showStatus(`Loading ${option.label}…`);
+      this.lastGraphPayload = null;
+      this.selectNode(null, { updateDetails: true, resetFocus: true });
       if (option.type === 'shape' && option.objectName) {
         this.activeObject = getObjectByName(option.objectName);
       } else if (option.type === 'graph') {
@@ -277,17 +456,69 @@ export class GraphExplorerView extends ItemView {
           graphData = { nodes: [], links: [], summary: '', query: '' };
         }
         this.activeObject = replaceNarrativeGraph(graphData, { graphName: option.label });
-        this.selectedNodeIndex = 0;
-        this.lastRenderedNodeSignature = null;
       }
       this.renderer.setObject(this.activeObject);
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
       this.labelElements.forEach((el) => { el.style.display = 'none'; });
       this.showStatus(`${option.label} ready`);
+      this.applyPendingFocus(true);
     } catch (error) {
       console.error('[4d-graph] Failed to load dataset', error);
       new Notice('Failed to load graph dataset. Check console for details.');
       this.showStatus('Load failed');
+    }
+  }
+
+  async handleActiveFileChange(file: TFile | null): Promise<void> {
+    this.pendingFocusPath = file?.path ?? null;
+    if (this.selectedDataset === 'vault-local') {
+      await this.loadSelectedDataset(true);
+      return;
+    }
+    this.applyPendingFocus(true);
+  }
+
+  private applyPendingFocus(force = false) {
+    if (!this.activeObject?.meta || this.activeObject.meta.type !== 'graph') {
+      if (force) {
+        this.selectNode(null, { resetFocus: true });
+      }
+      return;
+    }
+    const focusPath = this.pendingFocusPath;
+    if (!focusPath) {
+      if (force) {
+        this.selectNode(null, { resetFocus: true });
+      }
+      return;
+    }
+    const index = this.activeObject.meta.nodes.findIndex((node) => node.id === focusPath);
+    if (index !== -1) {
+      this.selectNode(index, { resetFocus: true });
+    } else if (force) {
+      this.selectNode(null, { resetFocus: true });
+    }
+  }
+
+  private selectNode(index: number | null, options: { resetFocus?: boolean; updateDetails?: boolean } = {}) {
+    const { resetFocus = true, updateDetails = true } = options;
+    this.selectedNodeIndex = index;
+    if (resetFocus) {
+      this.focusStrength = 0;
+    }
+    this.lastRenderedNodeSignature = null;
+
+    if (updateDetails) {
+      if (index === null) {
+        this.nodeInfoEl.empty();
+        this.imageStripEl.empty();
+      } else {
+        this.updateNodeDetails(index);
+      }
+    }
+
+    if (this.lastGraphPayload) {
+      this.renderLabels(this.lastGraphPayload);
     }
   }
 
@@ -303,10 +534,11 @@ export class GraphExplorerView extends ItemView {
     if (!this.activeObject) return;
 
     if (this.state.autoRotate) {
-      const speed = this.state.autoSpeed + 0.1;
-      this.state.rotation.xy += 0.28 * speed * 0.016;
-      this.state.rotation.xw += 0.24 * speed * 0.016;
-      this.state.rotation.yz += 0.18 * speed * 0.016;
+      const speed = this.state.autoSpeed;
+      const delta = 0.016;
+      this.state.rotation.xy += 0.12 * speed * delta;
+      this.state.rotation.xw += 0.1 * speed * delta;
+      this.state.rotation.yz += 0.08 * speed * delta;
     }
 
     const rotationMatrix = composeRotation(this.state.rotation);
@@ -322,6 +554,26 @@ export class GraphExplorerView extends ItemView {
     }
 
     const theme = getTheme(this.state.themeId);
+    const baseFocusColor = theme.pointColor({ normW: 0.2, depth: 0 });
+    const focusColor: [number, number, number] = [
+      Math.min(1, baseFocusColor[0] * 0.35 + 0.65),
+      Math.min(1, baseFocusColor[1] * 0.35 + 0.65),
+      Math.min(1, baseFocusColor[2] * 0.35 + 0.65),
+    ];
+    this.state.graph.focusColor = focusColor;
+
+    if (this.state.graph.focusNode !== this.selectedNodeIndex) {
+      this.state.graph.focusNode = this.selectedNodeIndex;
+      this.focusStrength = 0;
+    }
+
+    const targetStrength = this.selectedNodeIndex !== null ? 1 : 0;
+    const approach = this.selectedNodeIndex !== null ? 0.12 : 0.08;
+    this.focusStrength += (targetStrength - this.focusStrength) * approach;
+    if (Math.abs(targetStrength - this.focusStrength) < 0.001) {
+      this.focusStrength = targetStrength;
+    }
+    this.state.graph.focusStrength = this.focusStrength;
 
     this.renderer.renderFrame({
       vertices4d: this.transformedVertices,
@@ -332,10 +584,6 @@ export class GraphExplorerView extends ItemView {
       theme,
       graphState: this.activeObject.meta?.type === 'graph' ? this.state.graph : null,
     });
-
-    if (this.state.graph.focusNode !== this.selectedNodeIndex) {
-      this.state.graph.focusNode = this.selectedNodeIndex;
-    }
 
     if (this.activeObject.meta?.type !== 'graph') {
       this.nodeInfoEl.empty();
@@ -355,32 +603,16 @@ export class GraphExplorerView extends ItemView {
   private handleCanvasClick(event: MouseEvent) {
     const index = this.pickNodeFromEvent(event);
     if (index === null) {
-      this.selectedNodeIndex = null;
-      this.lastRenderedNodeSignature = null;
-      this.nodeInfoEl.empty();
-      this.imageStripEl.empty();
-      if (this.lastGraphPayload) {
-        this.renderLabels(this.lastGraphPayload);
-      }
+      this.selectNode(null);
       return;
     }
-    this.selectedNodeIndex = index;
-    this.lastRenderedNodeSignature = null;
-    this.updateNodeDetails(index);
-    if (this.lastGraphPayload) {
-      this.renderLabels(this.lastGraphPayload);
-    }
+    this.selectNode(index);
   }
 
   private handleCanvasDoubleClick(event: MouseEvent) {
     const index = this.pickNodeFromEvent(event);
     if (index === null) return;
-    this.selectedNodeIndex = index;
-    this.lastRenderedNodeSignature = null;
-    this.updateNodeDetails(index);
-    if (this.lastGraphPayload) {
-      this.renderLabels(this.lastGraphPayload);
-    }
+    this.selectNode(index);
     void this.openNodeByIndex(index);
   }
 
@@ -466,6 +698,20 @@ export class GraphExplorerView extends ItemView {
 
     const { positions, labels, vertexVisibility } = payload;
     const focusIndex = this.selectedNodeIndex ?? -1;
+    const MAX_VISIBLE_LABELS = 48;
+    const MIN_VISIBILITY = 0.04;
+    const MIN_OPACITY = 0.12;
+
+    type LabelCandidate = {
+      index: number;
+      text: string;
+      x: number;
+      y: number;
+      opacity: number;
+      weight: number;
+      fontSize: number;
+      focus: boolean;
+    };
 
     while (this.labelElements.length < labels.length) {
       const el = document.createElement('div');
@@ -478,13 +724,14 @@ export class GraphExplorerView extends ItemView {
       this.labelElements[i].style.display = 'none';
     }
 
+    const candidates: LabelCandidate[] = [];
+
     for (let i = 0; i < labels.length; i += 1) {
-      const el = this.labelElements[i];
       const node = labels[i];
       const pos = positions[i];
-      if (!el || !node || !pos) continue;
+      if (!node || !pos) continue;
       const visibility = vertexVisibility ? vertexVisibility[i] ?? 0 : 1;
-      if (visibility <= 0.02) {
+      if (visibility <= MIN_VISIBILITY) {
         continue;
       }
       this.tempVec.set(pos[0], pos[1], pos[2]).project(camera);
@@ -496,20 +743,74 @@ export class GraphExplorerView extends ItemView {
       const ndcY = this.tempVec.y;
       if (Math.abs(ndcX) > 1.2 || Math.abs(ndcY) > 1.2) continue;
 
-      const depth = Math.min(1, Math.max(0, (this.tempVec.z + 1) / 2));
-      const depthScale = 1 - depth * 0.85;
-      const opacity = Math.max(0.18, Math.min(1, visibility * depthScale));
-      const baseSize = focusIndex === i ? 20 : 14;
-      const fontSize = baseSize + depthScale * 10;
-      const x = (ndcX + 1) / 2 * width;
-      const y = (-ndcY + 1) / 2 * height;
-      el.textContent = node.emoji ? `${node.emoji} ${node.label}` : node.label;
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
-      el.style.fontSize = `${fontSize.toFixed(1)}px`;
-      el.style.opacity = opacity.toFixed(2);
+      const depthNorm = Math.min(1, Math.max(0, (this.tempVec.z + 1) * 0.5));
+      const depthFactor = 1 - Math.pow(depthNorm, 1.22);
+      const radialFalloff = 1 - Math.min(1, Math.hypot(ndcX, ndcY) / 1.35);
+      const focusBoost = focusIndex === i ? 1.6 : 1;
+      const weight = visibility * (0.45 + depthFactor * 0.55) * (0.55 + radialFalloff * 0.45) * focusBoost;
+      const opacity = focusIndex === i ? 1 : Math.min(1, Math.max(MIN_OPACITY, weight));
+      const baseSize = focusIndex === i ? 21 : 14;
+      const fontSize = baseSize + depthFactor * 8 + visibility * 4;
+      const x = (ndcX + 1) * 0.5 * width;
+      const y = (1 - ndcY) * 0.5 * height;
+      const text = node.emoji ? `${node.emoji} ${node.label}` : node.label;
+
+      candidates.push({
+        index: i,
+        text,
+        x,
+        y,
+        opacity,
+        weight,
+        fontSize,
+        focus: focusIndex === i,
+      });
+    }
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const focusCandidate = candidates.find((candidate) => candidate.focus) ?? null;
+    const sorted = [...candidates].sort((a, b) => b.weight - a.weight);
+    const visible: LabelCandidate[] = [];
+
+    if (focusCandidate) {
+      visible.push({ ...focusCandidate, weight: Math.max(focusCandidate.weight, 1.2) });
+    }
+
+    for (const candidate of sorted) {
+      if (visible.some((existing) => existing.index === candidate.index)) {
+        continue;
+      }
+      let overlaps = false;
+      for (const existing of visible) {
+        const dx = candidate.x - existing.x;
+        const dy = candidate.y - existing.y;
+        const threshold = Math.max(28, (candidate.fontSize + existing.fontSize) * 0.34);
+        if (dx * dx + dy * dy < threshold * threshold) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (overlaps) continue;
+      visible.push(candidate);
+      if (visible.length >= MAX_VISIBLE_LABELS) {
+        break;
+      }
+    }
+
+    for (const candidate of visible) {
+      const el = this.labelElements[candidate.index];
+      if (!el) continue;
+      el.textContent = candidate.text;
+      el.style.left = `${candidate.x}px`;
+      el.style.top = `${candidate.y}px`;
+      el.style.fontSize = `${candidate.fontSize.toFixed(1)}px`;
+      el.style.opacity = candidate.opacity.toFixed(2);
+      el.style.zIndex = String(400 + Math.round(candidate.weight * 220));
       el.style.display = 'block';
-      el.classList.toggle('hyper-label-focus', focusIndex === i);
+      el.classList.toggle('hyper-label-focus', candidate.focus);
     }
   }
 

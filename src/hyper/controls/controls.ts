@@ -135,7 +135,7 @@ export class HyperControls {
   }
 
   adjustZoom(delta) {
-    this.state.camera.zoom = clamp(this.state.camera.zoom + delta, 0.5, 2.5);
+    this.state.camera.zoom = clamp(this.state.camera.zoom + delta, 0.35, 8);
     if (this.callbacks.zoom) {
       this.callbacks.zoom(this.state);
     }
