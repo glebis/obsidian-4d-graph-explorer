@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-4d-graph-explorer",
+  "name": "4D Graph Explorer",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Explore your Obsidian knowledge graph in four dimensions with immersive visuals, images, and canvas overlays.",
+  "author": "Gleb Kalinin",
+  "authorUrl": "https://github.com/glebkalinin",
+  "isDesktopOnly": false
+}

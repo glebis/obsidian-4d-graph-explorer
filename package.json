@@ -1,0 +1,21 @@
+{
+  "name": "obsidian-4d-graph-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Obsidian plugin for immersive 4D graph visualization that supports local vault data, media, and canvas overlays.",
+  "scripts": {
+    "dev": "node esbuild.config.mjs --watch",
+    "build": "node esbuild.config.mjs --prod"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/three": "^0.160.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "^1.5.11",
+    "tslib": "^2.7.0",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}

@@ -1,0 +1,169 @@
+/* Core layout for the 4D graph view */
+.hyper-view-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%);
+  color: var(--text-normal);
+}
+
+.hyper-view-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.hyper-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-monospace);
+  color: rgba(235, 244, 255, 0.92);
+}
+
+.hyper-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-interface, var(--font-monospace));
+  color: rgba(232, 240, 255, 0.95);
+}
+
+.hyper-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  text-shadow: 0 2px 8px rgba(6, 10, 28, 0.85);
+  letter-spacing: 0.01em;
+  transition: opacity 0.1s ease, font-size 0.1s ease;
+  will-change: transform, opacity;
+}
+
+.hyper-label-focus {
+  font-weight: 600;
+  text-shadow: 0 3px 12px rgba(40, 120, 255, 0.6);
+}
+
+.hyper-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  backdrop-filter: blur(14px);
+  background: rgba(10, 18, 36, 0.85);
+  border: 1px solid rgba(140, 190, 255, 0.35);
+  box-shadow: 0 14px 32px rgba(5, 12, 26, 0.55);
+  pointer-events: auto;
+  color: rgba(230, 240, 255, 0.92);
+}
+
+.hyper-toolbar span {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(204, 224, 255, 0.95);
+}
+
+.hyper-toolbar button,
+.hyper-toolbar select {
+  background: rgba(28, 46, 80, 0.92);
+  color: rgba(235, 244, 255, 0.96);
+  border: 1px solid rgba(160, 208, 255, 0.55);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 6px 14px rgba(12, 24, 48, 0.32);
+}
+
+.hyper-toolbar button:hover,
+.hyper-toolbar button:focus,
+.hyper-toolbar select:hover,
+.hyper-toolbar select:focus {
+  background: rgba(70, 140, 220, 0.95);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(10, 32, 68, 0.45);
+}
+
+.hyper-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.hyper-image-strip {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(12, 22, 40, 0.88);
+  border: 1px solid rgba(140, 190, 255, 0.28);
+  pointer-events: auto;
+  color: rgba(215, 230, 255, 0.92);
+}
+
+.hyper-image-strip img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(160, 208, 255, 0.5);
+  box-shadow: 0 6px 18px rgba(10, 20, 44, 0.55);
+}
+
+.hyper-node-info {
+  position: absolute;
+  right: 16px;
+  top: 72px;
+  width: 280px;
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  padding: 16px;
+  background: rgba(8, 16, 32, 0.9);
+  border-radius: 14px;
+  border: 1px solid rgba(150, 205, 255, 0.32);
+  box-shadow: 0 16px 36px rgba(5, 12, 26, 0.55);
+  pointer-events: auto;
+  color: rgba(220, 232, 255, 0.94);
+}
+
+.hyper-node-info h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.hyper-node-info p {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(198, 214, 240, 0.9);
+}
+
+.hyper-view-container ::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.hyper-view-container ::-webkit-scrollbar-thumb {
+  background: rgba(150, 205, 255, 0.45);
+  border-radius: 999px;
+}
+
+.hyper-view-container ::-webkit-scrollbar-track {
+  background: transparent;
+}
