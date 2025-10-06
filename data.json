@@ -1,0 +1,9 @@
+{
+  "repelForce": 10,
+  "centerForce": 0.93,
+  "linkForce": 1.15,
+  "linkDistance": 0.85,
+  "nodeSizeMultiplier": 3,
+  "showLinks": true,
+  "showOnlyExistingFiles": false
+}

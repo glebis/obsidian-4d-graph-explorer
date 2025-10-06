@@ -21,6 +21,35 @@ interface DegreeMaps {
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'tiff']);
 
+function isFileExcluded(app: App, file: TFile): boolean {
+  // Access Obsidian's user ignore filters from vault config
+  const config = (app.vault as any).config;
+  const userIgnoreFilters: string[] = config?.userIgnoreFilters ?? [];
+
+  if (userIgnoreFilters.length === 0) return false;
+
+  // Check if file path matches any exclusion pattern
+  for (const pattern of userIgnoreFilters) {
+    // Convert glob-like pattern to regex
+    // Simple implementation: * becomes .*, ** becomes .*
+    const regexPattern = pattern
+      .replace(/\./g, '\\.')
+      .replace(/\*\*/g, '.*')
+      .replace(/\*/g, '[^/]*');
+
+    try {
+      const regex = new RegExp(`^${regexPattern}$`);
+      if (regex.test(file.path)) {
+        return true;
+      }
+    } catch (error) {
+      console.warn('[vaultGraph] Invalid exclusion pattern:', pattern, error);
+    }
+  }
+
+  return false;
+}
+
 function buildDegreeMaps(resolvedLinks: Record<string, Record<string, number>>): DegreeMaps {
   const outgoing = new Map<string, number>();
   const incoming = new Map<string, number>();
@@ -252,6 +281,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   const seen = new Set<string>();
   targetFiles.forEach((file) => {
     if (seen.has(file.path)) return;
+    if (isFileExcluded(app, file)) return;
     const category = getCategoryForFile(file);
     if (category === 'image' && !includeAttachments) return;
     seen.add(file.path);
