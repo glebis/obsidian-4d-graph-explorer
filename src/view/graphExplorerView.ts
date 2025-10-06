@@ -202,13 +202,19 @@ export class GraphExplorerView extends ItemView {
   private previousVertices: Vec4[] = [];
   private animationProgress = 1;
   private animationDuration = 600;
+  private cameraAnimationProgress = 1;
+  private cameraAnimationDuration = 800;
+  private cameraAnimationStart: { position: [number, number, number]; up: [number, number, number] } | null = null;
+  private cameraAnimationTarget: { position: [number, number, number]; up: [number, number, number] } | null = null;
+  private enableAnimations = true;
+  private settings: GraphExplorerSettings;
 
   constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
     this.plugin = plugin;
     const activeFile = this.app.workspace.getActiveFile();
     this.selectedDataset = 'vault-local';
-    const settings = this.plugin.settings;
+    this.settings = this.plugin.settings;
     this.state = {
       rotation: { xy: 0, xz: 0, xw: 0, yz: 0, yw: 0, zw: 0 },
       slice: { mode: 'projection', offset: 0, thickness: 0.24 },
@@ -223,8 +229,8 @@ export class GraphExplorerView extends ItemView {
         focusColor: [1, 1, 1],
         glow: 0.6,
         pointOpacity: 0.95,
-        nodeScale: settings.nodeSizeMultiplier,
-        showLinks: settings.showLinks,
+        nodeScale: this.settings.nodeSizeMultiplier,
+        showLinks: this.settings.showLinks,
       },
     };
     this.pendingFocusPath = activeFile?.path ?? null;
@@ -232,6 +238,7 @@ export class GraphExplorerView extends ItemView {
   }
 
   applySettings(settings: GraphExplorerSettings): void {
+    this.settings = settings;
     this.state.graph.nodeScale = settings.nodeSizeMultiplier;
     this.state.graph.showLinks = settings.showLinks;
   }
@@ -443,6 +450,20 @@ export class GraphExplorerView extends ItemView {
       this.updateSpeedDisplay();
     });
     this.autoSpeedValueEl = speedControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const animationsRow = body.createDiv({ cls: 'hyper-config-row' });
+    const animationsId = `hyper-animations-${uniqueSuffix}`;
+    animationsRow.createEl('label', { text: 'Enable animations', attr: { for: animationsId } });
+    const animationsToggle = animationsRow.createEl('input', {
+      attr: {
+        id: animationsId,
+        type: 'checkbox',
+      },
+    });
+    animationsToggle.checked = this.enableAnimations;
+    animationsToggle.addEventListener('change', (event) => {
+      this.enableAnimations = (event.target as HTMLInputElement).checked;
+    });
   }
 
   private toggleConfigPanel(force?: boolean) {
@@ -510,17 +531,33 @@ export class GraphExplorerView extends ItemView {
     this.nodeInfoEl.style.display = hasContent ? '' : 'none';
   }
 
-  private applyCameraPreset(presetId: CameraPresetId, options: { syncSelector?: boolean } = {}) {
+  private applyCameraPreset(presetId: CameraPresetId, options: { syncSelector?: boolean; animate?: boolean } = {}) {
     const camera = (this.renderer as any)?.camera;
     if (!camera) return;
     const preset = CAMERA_PRESETS.find((item) => item.id === presetId) ?? CAMERA_PRESETS[0];
     if (!preset) return;
 
     const up = preset.up ?? [0, 1, 0];
-    camera.position.set(preset.position[0], preset.position[1], preset.position[2]);
-    camera.up.set(up[0], up[1], up[2]);
-    camera.lookAt(0, 0, 0);
-    camera.updateProjectionMatrix();
+    const targetPosition: [number, number, number] = preset.position;
+    const targetUp: [number, number, number] = up;
+
+    // Animate camera transition if enabled
+    if (this.enableAnimations && options.animate !== false) {
+      this.cameraAnimationStart = {
+        position: [camera.position.x, camera.position.y, camera.position.z],
+        up: [camera.up.x, camera.up.y, camera.up.z],
+      };
+      this.cameraAnimationTarget = {
+        position: targetPosition,
+        up: targetUp,
+      };
+      this.cameraAnimationProgress = 0;
+    } else {
+      camera.position.set(targetPosition[0], targetPosition[1], targetPosition[2]);
+      camera.up.set(targetUp[0], targetUp[1], targetUp[2]);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+    }
 
     this.state.camera.preset = preset.id;
     if (options.syncSelector !== false && this.cameraPresetSelectEl) {
@@ -544,10 +581,12 @@ export class GraphExplorerView extends ItemView {
       this.selectNode(null, { updateDetails: true, resetFocus: true });
 
       // Cache previous vertices for animation
-      const shouldAnimate = this.activeObject && this.activeObject.vertices.length > 0;
+      const shouldAnimate = this.enableAnimations && this.activeObject && this.activeObject.vertices.length > 0;
       if (shouldAnimate) {
         this.previousVertices = this.transformedVertices.map(v => v ? [...v] as Vec4 : [0, 0, 0, 0]);
         this.animationProgress = 0;
+      } else {
+        this.animationProgress = 1;
       }
 
       if (option.type === 'shape' && option.objectName) {
@@ -560,6 +599,7 @@ export class GraphExplorerView extends ItemView {
           const opts: VaultGraphOptions = {
             ...option.vaultOptions,
             rootFile: option.vaultOptions.scope === 'local' ? this.app.workspace.getActiveFile() : undefined,
+            showOnlyExistingFiles: this.settings.showOnlyExistingFiles,
           };
           if (opts.scope === 'local' && !opts.rootFile) {
             new Notice('Open a note to seed the local vault graph.');
@@ -648,6 +688,40 @@ export class GraphExplorerView extends ItemView {
   private animateFrame() {
     if (!this.activeObject) return;
 
+    // Animate camera transitions
+    if (this.cameraAnimationProgress < 1) {
+      this.cameraAnimationProgress = Math.min(1, this.cameraAnimationProgress + (16 / this.cameraAnimationDuration));
+      const easeProgress = this.easeOutCubic(this.cameraAnimationProgress);
+
+      if (this.cameraAnimationStart && this.cameraAnimationTarget) {
+        const camera = (this.renderer as any)?.camera;
+        if (camera) {
+          const start = this.cameraAnimationStart;
+          const target = this.cameraAnimationTarget;
+
+          camera.position.set(
+            start.position[0] + (target.position[0] - start.position[0]) * easeProgress,
+            start.position[1] + (target.position[1] - start.position[1]) * easeProgress,
+            start.position[2] + (target.position[2] - start.position[2]) * easeProgress
+          );
+
+          camera.up.set(
+            start.up[0] + (target.up[0] - start.up[0]) * easeProgress,
+            start.up[1] + (target.up[1] - start.up[1]) * easeProgress,
+            start.up[2] + (target.up[2] - start.up[2]) * easeProgress
+          );
+
+          camera.lookAt(0, 0, 0);
+          camera.updateProjectionMatrix();
+
+          if (this.cameraAnimationProgress >= 1) {
+            this.cameraAnimationStart = null;
+            this.cameraAnimationTarget = null;
+          }
+        }
+      }
+    }
+
     if (this.state.autoRotate) {
       const speed = this.state.autoSpeed;
       const delta = 0.016;
@@ -656,7 +730,7 @@ export class GraphExplorerView extends ItemView {
       this.state.rotation.yz += 0.08 * speed * delta;
     }
 
-    // Advance animation progress
+    // Advance node animation progress
     if (this.animationProgress < 1) {
       this.animationProgress = Math.min(1, this.animationProgress + (16 / this.animationDuration));
     }

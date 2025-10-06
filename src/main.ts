@@ -9,6 +9,7 @@ export interface GraphExplorerSettings {
   linkDistance: number;
   nodeSizeMultiplier: number;
   showLinks: boolean;
+  showOnlyExistingFiles: boolean;
 }
 
 const DEFAULT_SETTINGS: GraphExplorerSettings = {
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   linkDistance: 1.6,
   nodeSizeMultiplier: 1,
   showLinks: true,
+  showOnlyExistingFiles: true,
 };
 
 export default class GraphExplorerPlugin extends Plugin {
@@ -211,6 +213,17 @@ class GraphExplorerSettingTab extends PluginSettingTab {
         toggle.setValue(this.plugin.settings.showLinks);
         toggle.onChange(async (value) => {
           this.plugin.settings.showLinks = value;
+          await this.plugin.handleVisualSettingChange();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Show only existing files')
+      .setDesc('Hide nodes for non-existent files (unresolved links).')
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.showOnlyExistingFiles);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.showOnlyExistingFiles = value;
           await this.plugin.handleVisualSettingChange();
         });
       });

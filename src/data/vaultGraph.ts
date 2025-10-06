@@ -11,6 +11,7 @@ export interface VaultGraphOptions {
   includeAttachments?: boolean;
   maxNodes?: number;
   depth?: number;
+  showOnlyExistingFiles?: boolean;
 }
 
 interface DegreeMaps {
@@ -233,6 +234,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   const includeCanvas = options.includeCanvas ?? true;
   const includeAttachments = options.includeAttachments ?? false;
   const maxNodes = options.maxNodes ?? 360;
+  const showOnlyExistingFiles = options.showOnlyExistingFiles ?? true;
 
   const resolvedLinks = app.metadataCache.resolvedLinks;
   const reverseLinks = collectReverseLinks(resolvedLinks);
