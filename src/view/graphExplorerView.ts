@@ -98,11 +98,6 @@ interface DatasetOption {
 const DATASET_OPTIONS: DatasetOption[] = [
   { id: 'vault-local', label: 'Vault · Local (active note)', type: 'graph', vaultOptions: { scope: 'local', includeCanvas: true, depth: 2 } },
   { id: 'vault-global', label: 'Vault · Global Graph', type: 'graph', vaultOptions: { scope: 'global', includeCanvas: true } },
-  { id: 'narrative', label: 'Sample Narrative Graph', type: 'graph' },
-  { id: 'tesseract', label: 'Tesseract (Hypercube)', type: 'shape', objectName: 'Tesseract' },
-  { id: 'fivecell', label: '5-Cell Simplex', type: 'shape', objectName: '5-Cell' },
-  { id: 'sixteencell', label: '16-Cell Hypercross', type: 'shape', objectName: '16-Cell' },
-  { id: 'duocylinder', label: 'Duocylinder Lattice', type: 'shape', objectName: 'Duocylinder' },
 ];
 
 const CAMERA_PRESETS: CameraPreset[] = [
