@@ -199,6 +199,9 @@ export class GraphExplorerView extends ItemView {
   private themeCycle = themeList();
   private focusStrength = 0;
   private pendingFocusPath: string | null = null;
+  private previousVertices: Vec4[] = [];
+  private animationProgress = 1;
+  private animationDuration = 600;
 
   constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
@@ -529,12 +532,24 @@ export class GraphExplorerView extends ItemView {
     // No-op placeholder: continuous loop handles rendering
   }
 
+  private easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
   async loadSelectedDataset(force = false) {
     const option = DATASET_OPTIONS.find((item) => item.id === this.selectedDataset) ?? DATASET_OPTIONS[0];
     try {
       this.showStatus(`Loading ${option.label}…`);
       this.lastGraphPayload = null;
       this.selectNode(null, { updateDetails: true, resetFocus: true });
+
+      // Cache previous vertices for animation
+      const shouldAnimate = this.activeObject && this.activeObject.vertices.length > 0;
+      if (shouldAnimate) {
+        this.previousVertices = this.transformedVertices.map(v => v ? [...v] as Vec4 : [0, 0, 0, 0]);
+        this.animationProgress = 0;
+      }
+
       if (option.type === 'shape' && option.objectName) {
         this.activeObject = getObjectByName(option.objectName);
       } else if (option.type === 'graph') {
@@ -641,9 +656,29 @@ export class GraphExplorerView extends ItemView {
       this.state.rotation.yz += 0.08 * speed * delta;
     }
 
+    // Advance animation progress
+    if (this.animationProgress < 1) {
+      this.animationProgress = Math.min(1, this.animationProgress + (16 / this.animationDuration));
+    }
+
     const rotationMatrix = composeRotation(this.state.rotation);
+    const easeProgress = this.easeOutCubic(this.animationProgress);
+
     for (let i = 0; i < this.activeObject.vertices.length; i += 1) {
-      this.transformedVertices[i] = applyMatrix(this.activeObject.vertices[i], rotationMatrix);
+      const targetVertex = applyMatrix(this.activeObject.vertices[i], rotationMatrix);
+
+      // Interpolate between previous and current positions during animation
+      if (this.animationProgress < 1 && i < this.previousVertices.length) {
+        const prev = this.previousVertices[i];
+        this.transformedVertices[i] = [
+          prev[0] + (targetVertex[0] - prev[0]) * easeProgress,
+          prev[1] + (targetVertex[1] - prev[1]) * easeProgress,
+          prev[2] + (targetVertex[2] - prev[2]) * easeProgress,
+          prev[3] + (targetVertex[3] - prev[3]) * easeProgress,
+        ];
+      } else {
+        this.transformedVertices[i] = targetVertex;
+      }
     }
 
     if (this.state.projection.scaleTarget !== undefined) {
