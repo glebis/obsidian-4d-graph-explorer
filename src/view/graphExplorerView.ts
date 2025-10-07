@@ -96,8 +96,8 @@ interface DatasetOption {
 }
 
 const DATASET_OPTIONS: DatasetOption[] = [
-  { id: 'vault-local', label: 'Vault · Local (active note)', type: 'graph', vaultOptions: { scope: 'local', includeCanvas: true, depth: 2 } },
-  { id: 'vault-global', label: 'Vault · Global Graph', type: 'graph', vaultOptions: { scope: 'global', includeCanvas: true } },
+  { id: 'vault-local', label: 'Local', type: 'graph', vaultOptions: { scope: 'local', includeCanvas: true, depth: 2 } },
+  { id: 'vault-global', label: 'Global', type: 'graph', vaultOptions: { scope: 'global', includeCanvas: true } },
 ];
 
 const CAMERA_PRESETS: CameraPreset[] = [
@@ -175,6 +175,18 @@ export class GraphExplorerView extends ItemView {
   private zoomValueEl!: HTMLSpanElement;
   private autoSpeedSliderEl!: HTMLInputElement;
   private autoSpeedValueEl!: HTMLSpanElement;
+  private repelForceSliderEl!: HTMLInputElement;
+  private repelForceValueEl!: HTMLSpanElement;
+  private centerForceSliderEl!: HTMLInputElement;
+  private centerForceValueEl!: HTMLSpanElement;
+  private linkForceSliderEl!: HTMLInputElement;
+  private linkForceValueEl!: HTMLSpanElement;
+  private linkDistanceSliderEl!: HTMLInputElement;
+  private linkDistanceValueEl!: HTMLSpanElement;
+  private nodeSizeSliderEl!: HTMLInputElement;
+  private nodeSizeValueEl!: HTMLSpanElement;
+  private showLinksToggleEl!: HTMLInputElement;
+  private showOnlyExistingFilesToggleEl!: HTMLInputElement;
   private configToggleBtn!: HTMLButtonElement;
   private refreshBtn!: HTMLButtonElement;
   private autoRotateBtn!: HTMLButtonElement;
@@ -299,6 +311,11 @@ export class GraphExplorerView extends ItemView {
     this.updateAutoRotateButton();
     this.updateZoomDisplay();
     this.updateSpeedDisplay();
+    this.updateRepelForceDisplay();
+    this.updateCenterForceDisplay();
+    this.updateLinkForceDisplay();
+    this.updateLinkDistanceDisplay();
+    this.updateNodeSizeDisplay();
 
     this.imageStripEl = this.rootEl.createDiv({ cls: 'hyper-image-strip' });
     this.nodeInfoEl = this.rootEl.createDiv({ cls: 'hyper-node-info' });
@@ -459,6 +476,161 @@ export class GraphExplorerView extends ItemView {
     animationsToggle.addEventListener('change', (event) => {
       this.enableAnimations = (event.target as HTMLInputElement).checked;
     });
+
+    // Force layout settings
+    body.createEl('h4', { text: 'Force Layout' });
+
+    const repelForceRow = body.createDiv({ cls: 'hyper-config-row' });
+    const repelForceId = `hyper-repel-force-${uniqueSuffix}`;
+    repelForceRow.createEl('label', { text: 'Repel force', attr: { for: repelForceId } });
+    const repelForceControl = repelForceRow.createDiv({ cls: 'hyper-config-control' });
+    this.repelForceSliderEl = repelForceControl.createEl('input', {
+      attr: {
+        id: repelForceId,
+        type: 'range',
+        min: '0',
+        max: '10',
+        step: '0.1',
+        value: this.settings.repelForce.toFixed(1),
+      },
+    });
+    this.repelForceSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.repelForce = value;
+      void this.plugin.handleForceSettingChange();
+      this.updateRepelForceDisplay();
+    });
+    this.repelForceValueEl = repelForceControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const centerForceRow = body.createDiv({ cls: 'hyper-config-row' });
+    const centerForceId = `hyper-center-force-${uniqueSuffix}`;
+    centerForceRow.createEl('label', { text: 'Center force', attr: { for: centerForceId } });
+    const centerForceControl = centerForceRow.createDiv({ cls: 'hyper-config-control' });
+    this.centerForceSliderEl = centerForceControl.createEl('input', {
+      attr: {
+        id: centerForceId,
+        type: 'range',
+        min: '0',
+        max: '1.5',
+        step: '0.01',
+        value: this.settings.centerForce.toFixed(2),
+      },
+    });
+    this.centerForceSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.centerForce = value;
+      void this.plugin.handleForceSettingChange();
+      this.updateCenterForceDisplay();
+    });
+    this.centerForceValueEl = centerForceControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const linkForceRow = body.createDiv({ cls: 'hyper-config-row' });
+    const linkForceId = `hyper-link-force-${uniqueSuffix}`;
+    linkForceRow.createEl('label', { text: 'Link force', attr: { for: linkForceId } });
+    const linkForceControl = linkForceRow.createDiv({ cls: 'hyper-config-control' });
+    this.linkForceSliderEl = linkForceControl.createEl('input', {
+      attr: {
+        id: linkForceId,
+        type: 'range',
+        min: '0',
+        max: '4',
+        step: '0.05',
+        value: this.settings.linkForce.toFixed(2),
+      },
+    });
+    this.linkForceSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.linkForce = value;
+      void this.plugin.handleForceSettingChange();
+      this.updateLinkForceDisplay();
+    });
+    this.linkForceValueEl = linkForceControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const linkDistanceRow = body.createDiv({ cls: 'hyper-config-row' });
+    const linkDistanceId = `hyper-link-distance-${uniqueSuffix}`;
+    linkDistanceRow.createEl('label', { text: 'Link distance', attr: { for: linkDistanceId } });
+    const linkDistanceControl = linkDistanceRow.createDiv({ cls: 'hyper-config-control' });
+    this.linkDistanceSliderEl = linkDistanceControl.createEl('input', {
+      attr: {
+        id: linkDistanceId,
+        type: 'range',
+        min: '0.2',
+        max: '6',
+        step: '0.05',
+        value: this.settings.linkDistance.toFixed(2),
+      },
+    });
+    this.linkDistanceSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.linkDistance = value;
+      void this.plugin.handleForceSettingChange();
+      this.updateLinkDistanceDisplay();
+    });
+    this.linkDistanceValueEl = linkDistanceControl.createEl('span', { cls: 'hyper-config-value' });
+
+    // Visual settings
+    body.createEl('h4', { text: 'Visual' });
+
+    const nodeSizeRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeId = `hyper-node-size-${uniqueSuffix}`;
+    nodeSizeRow.createEl('label', { text: 'Node size', attr: { for: nodeSizeId } });
+    const nodeSizeControl = nodeSizeRow.createDiv({ cls: 'hyper-config-control' });
+    this.nodeSizeSliderEl = nodeSizeControl.createEl('input', {
+      attr: {
+        id: nodeSizeId,
+        type: 'range',
+        min: '0.4',
+        max: '3',
+        step: '0.05',
+        value: this.settings.nodeSizeMultiplier.toFixed(2),
+      },
+    });
+    this.nodeSizeSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.nodeSizeMultiplier = value;
+      this.state.graph.nodeScale = value;
+      void this.plugin.handleVisualSettingChange();
+      this.updateNodeSizeDisplay();
+    });
+    this.nodeSizeValueEl = nodeSizeControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const showLinksRow = body.createDiv({ cls: 'hyper-config-row' });
+    const showLinksId = `hyper-show-links-${uniqueSuffix}`;
+    showLinksRow.createEl('label', { text: 'Show connecting lines', attr: { for: showLinksId } });
+    this.showLinksToggleEl = showLinksRow.createEl('input', {
+      attr: {
+        id: showLinksId,
+        type: 'checkbox',
+      },
+    });
+    this.showLinksToggleEl.checked = this.settings.showLinks;
+    this.showLinksToggleEl.addEventListener('change', (event) => {
+      const value = (event.target as HTMLInputElement).checked;
+      this.settings.showLinks = value;
+      this.state.graph.showLinks = value;
+      void this.plugin.handleVisualSettingChange();
+    });
+
+    const showOnlyExistingFilesRow = body.createDiv({ cls: 'hyper-config-row' });
+    const showOnlyExistingFilesId = `hyper-show-only-existing-files-${uniqueSuffix}`;
+    showOnlyExistingFilesRow.createEl('label', { text: 'Show only existing files', attr: { for: showOnlyExistingFilesId } });
+    this.showOnlyExistingFilesToggleEl = showOnlyExistingFilesRow.createEl('input', {
+      attr: {
+        id: showOnlyExistingFilesId,
+        type: 'checkbox',
+      },
+    });
+    this.showOnlyExistingFilesToggleEl.checked = this.settings.showOnlyExistingFiles;
+    this.showOnlyExistingFilesToggleEl.addEventListener('change', (event) => {
+      const value = (event.target as HTMLInputElement).checked;
+      this.settings.showOnlyExistingFiles = value;
+      void this.plugin.handleVisualSettingChange();
+    });
   }
 
   private toggleConfigPanel(force?: boolean) {
@@ -476,6 +648,11 @@ export class GraphExplorerView extends ItemView {
     if (this.configVisible) {
       this.updateZoomDisplay();
       this.updateSpeedDisplay();
+      this.updateRepelForceDisplay();
+      this.updateCenterForceDisplay();
+      this.updateLinkForceDisplay();
+      this.updateLinkDistanceDisplay();
+      this.updateNodeSizeDisplay();
     }
   }
 
@@ -509,6 +686,41 @@ export class GraphExplorerView extends ItemView {
     const speed = this.state.autoSpeed;
     this.autoSpeedSliderEl.value = speed.toFixed(2);
     this.autoSpeedValueEl.textContent = `${speed.toFixed(2)}x`;
+  }
+
+  private updateRepelForceDisplay() {
+    if (!this.repelForceSliderEl || !this.repelForceValueEl) return;
+    const value = this.settings.repelForce;
+    this.repelForceSliderEl.value = value.toFixed(1);
+    this.repelForceValueEl.textContent = value.toFixed(1);
+  }
+
+  private updateCenterForceDisplay() {
+    if (!this.centerForceSliderEl || !this.centerForceValueEl) return;
+    const value = this.settings.centerForce;
+    this.centerForceSliderEl.value = value.toFixed(2);
+    this.centerForceValueEl.textContent = value.toFixed(2);
+  }
+
+  private updateLinkForceDisplay() {
+    if (!this.linkForceSliderEl || !this.linkForceValueEl) return;
+    const value = this.settings.linkForce;
+    this.linkForceSliderEl.value = value.toFixed(2);
+    this.linkForceValueEl.textContent = value.toFixed(2);
+  }
+
+  private updateLinkDistanceDisplay() {
+    if (!this.linkDistanceSliderEl || !this.linkDistanceValueEl) return;
+    const value = this.settings.linkDistance;
+    this.linkDistanceSliderEl.value = value.toFixed(2);
+    this.linkDistanceValueEl.textContent = value.toFixed(2);
+  }
+
+  private updateNodeSizeDisplay() {
+    if (!this.nodeSizeSliderEl || !this.nodeSizeValueEl) return;
+    const value = this.settings.nodeSizeMultiplier;
+    this.nodeSizeSliderEl.value = value.toFixed(2);
+    this.nodeSizeValueEl.textContent = value.toFixed(2);
   }
 
   private updateCameraZoom() {
@@ -608,7 +820,7 @@ export class GraphExplorerView extends ItemView {
       this.renderer.setObject(this.activeObject);
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
       this.labelElements.forEach((el) => { el.style.display = 'none'; });
-      this.showStatus(`${option.label} ready`);
+      this.showStatus(`${option.label}`);
       this.applyPendingFocus(true);
     } catch (error) {
       console.error('[4d-graph] Failed to load dataset', error);

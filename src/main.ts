@@ -1,4 +1,4 @@
-import { App, Plugin, WorkspaceLeaf, TFile, PluginSettingTab, Setting } from 'obsidian';
+import { App, Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import { GraphExplorerView, HYPER_VIEW_TYPE } from './view/graphExplorerView';
 import { updateForceLayoutConfig } from './hyper/core/graph';
 
@@ -51,8 +51,6 @@ export default class GraphExplorerPlugin extends Plugin {
         }
       });
     }));
-
-    this.addSettingTab(new GraphExplorerSettingTab(this.app, this));
   }
 
   onunload(): void {
@@ -127,105 +125,5 @@ export default class GraphExplorerPlugin extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: HYPER_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
-  }
-}
-
-class GraphExplorerSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: GraphExplorerPlugin) {
-    super(app, plugin);
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    containerEl.createEl('h2', { text: '4D Graph Explorer Settings' });
-
-    new Setting(containerEl)
-      .setName('Repel force')
-      .setDesc('Pushes nodes away from each other. Increase to reduce clustering.')
-      .addSlider((slider) => {
-        slider.setLimits(0, 10, 0.1)
-          .setDynamicTooltip()
-          .setValue(this.plugin.settings.repelForce);
-        slider.onChange(async (value) => {
-          this.plugin.settings.repelForce = Math.round(value * 100) / 100;
-          await this.plugin.handleForceSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Center force')
-      .setDesc('Pulls the layout toward the origin to keep clusters in frame.')
-      .addSlider((slider) => {
-        slider.setLimits(0, 1.5, 0.01)
-          .setDynamicTooltip()
-          .setValue(this.plugin.settings.centerForce);
-        slider.onChange(async (value) => {
-          this.plugin.settings.centerForce = Math.round(value * 100) / 100;
-          await this.plugin.handleForceSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Link force')
-      .setDesc('Strengthens the attraction between linked nodes.')
-      .addSlider((slider) => {
-        slider.setLimits(0, 4, 0.05)
-          .setDynamicTooltip()
-          .setValue(this.plugin.settings.linkForce);
-        slider.onChange(async (value) => {
-          this.plugin.settings.linkForce = Math.round(value * 100) / 100;
-          await this.plugin.handleForceSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Link distance')
-      .setDesc('Target spacing between linked nodes in the force layout.')
-      .addSlider((slider) => {
-        slider.setLimits(0.2, 6, 0.05)
-          .setDynamicTooltip()
-          .setValue(this.plugin.settings.linkDistance);
-        slider.onChange(async (value) => {
-          this.plugin.settings.linkDistance = Math.round(value * 100) / 100;
-          await this.plugin.handleForceSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Node size')
-      .setDesc('Multiplies the visual point size of graph nodes.')
-      .addSlider((slider) => {
-        slider.setLimits(0.4, 3, 0.05)
-          .setDynamicTooltip()
-          .setValue(this.plugin.settings.nodeSizeMultiplier);
-        slider.onChange(async (value) => {
-          this.plugin.settings.nodeSizeMultiplier = Math.round(value * 100) / 100;
-          await this.plugin.handleVisualSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Show connecting lines')
-      .setDesc('Toggle visibility of link segments between nodes.')
-      .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.showLinks);
-        toggle.onChange(async (value) => {
-          this.plugin.settings.showLinks = value;
-          await this.plugin.handleVisualSettingChange();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('Show only existing files')
-      .setDesc('Hide nodes for non-existent files (unresolved links).')
-      .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.showOnlyExistingFiles);
-        toggle.onChange(async (value) => {
-          this.plugin.settings.showOnlyExistingFiles = value;
-          await this.plugin.handleVisualSettingChange();
-        });
-      });
   }
 }
