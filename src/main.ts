@@ -2,6 +2,16 @@ import { App, Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import { GraphExplorerView, HYPER_VIEW_TYPE } from './view/graphExplorerView';
 import { updateForceLayoutConfig } from './hyper/core/graph';
 
+export type ColorRuleType = 'tag' | 'path' | 'filename';
+
+export interface ColorRule {
+  id: string;
+  type: ColorRuleType;
+  pattern: string;
+  color: string;
+  enabled: boolean;
+}
+
 export interface GraphExplorerSettings {
   repelForce: number;
   centerForce: number;
@@ -10,6 +20,7 @@ export interface GraphExplorerSettings {
   nodeSizeMultiplier: number;
   showLinks: boolean;
   showOnlyExistingFiles: boolean;
+  colorRules: ColorRule[];
 }
 
 const DEFAULT_SETTINGS: GraphExplorerSettings = {
@@ -20,6 +31,7 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   nodeSizeMultiplier: 1,
   showLinks: true,
   showOnlyExistingFiles: true,
+  colorRules: [],
 };
 
 export default class GraphExplorerPlugin extends Plugin {

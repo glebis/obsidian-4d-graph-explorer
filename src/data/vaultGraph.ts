@@ -1,6 +1,7 @@
 import type { App, CachedMetadata } from 'obsidian';
 import { TFile } from 'obsidian';
 import type { GraphDataPayload, RawGraphLink, RawGraphNode } from '../hyper/core/graph';
+import type { ColorRule } from '../main';
 
 export type VaultGraphScope = 'global' | 'local';
 
@@ -12,6 +13,7 @@ export interface VaultGraphOptions {
   maxNodes?: number;
   depth?: number;
   showOnlyExistingFiles?: boolean;
+  colorRules?: ColorRule[];
 }
 
 interface DegreeMaps {
@@ -193,6 +195,61 @@ function extractTags(cache: CachedMetadata | null): string[] {
   return Array.from(tags);
 }
 
+function matchColorRule(rule: ColorRule, filePath: string, tags: string[], filename: string): boolean {
+  if (!rule.enabled || !rule.pattern) return false;
+
+  try {
+    if (rule.type === 'tag') {
+      const patterns = rule.pattern
+        .split(/[,\s]+/)
+        .map(p => p.trim().toLowerCase())
+        .filter(p => p.length > 0);
+
+      return patterns.some(pattern => tags.some(tag => tag.toLowerCase() === pattern));
+    } else if (rule.type === 'path') {
+      if (rule.pattern.startsWith('/') && rule.pattern.lastIndexOf('/') > 0) {
+        const lastSlash = rule.pattern.lastIndexOf('/');
+        const regexPattern = rule.pattern.slice(1, lastSlash);
+        const flags = rule.pattern.slice(lastSlash + 1);
+        const regex = new RegExp(regexPattern, flags || 'i');
+        return regex.test(filePath);
+      } else {
+        return filePath.toLowerCase().includes(rule.pattern.toLowerCase());
+      }
+    } else if (rule.type === 'filename') {
+      if (rule.pattern.startsWith('/') && rule.pattern.lastIndexOf('/') > 0) {
+        const lastSlash = rule.pattern.lastIndexOf('/');
+        const regexPattern = rule.pattern.slice(1, lastSlash);
+        const flags = rule.pattern.slice(lastSlash + 1);
+        const regex = new RegExp(regexPattern, flags || 'i');
+        return regex.test(filename);
+      } else {
+        return filename.toLowerCase().includes(rule.pattern.toLowerCase());
+      }
+    }
+  } catch (error) {
+    console.warn('[vaultGraph] Invalid color rule pattern:', rule, error);
+    return false;
+  }
+
+  return false;
+}
+
+function getCustomColorForFile(filePath: string, tags: string[], colorRules: ColorRule[]): number | null {
+  const filename = filePath.split('/').pop() ?? '';
+
+  for (const rule of colorRules) {
+    if (matchColorRule(rule, filePath, tags, filename)) {
+      // Convert hex color to integer
+      const hex = rule.color.replace('#', '');
+      const colorInt = parseInt(hex, 16);
+      return colorInt;
+    }
+  }
+
+  return null;
+}
+
 function gatherGlobalFiles(app: App, includeCanvas: boolean, maxNodes: number): TFile[] {
   const markdown = app.vault.getMarkdownFiles();
   const canvases = includeCanvas
@@ -290,6 +347,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 
   const nodes: RawGraphNode[] = [];
   const nodeIdByPath = new Map<string, string>();
+  const colorRules = options.colorRules ?? [];
 
   for (const file of filtered) {
     const cache = app.metadataCache.getFileCache(file) ?? null;
@@ -302,7 +360,9 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 
     nodeIdByPath.set(file.path, nodeId);
 
-    nodes.push({
+    // Apply custom color if matching rule exists
+    const customColor = getCustomColorForFile(file.path, tags, colorRules);
+    const nodeData: RawGraphNode = {
       id: nodeId,
       label: file.basename,
       category: getCategoryForFile(file),
@@ -312,7 +372,13 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
       imageUrl: image,
       media: gallery,
       raw: { isMoc, tags },
-    });
+    };
+
+    if (customColor !== null) {
+      nodeData.color = customColor;
+    }
+
+    nodes.push(nodeData);
   }
 
   const links: RawGraphLink[] = [];

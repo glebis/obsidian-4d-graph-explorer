@@ -310,3 +310,122 @@
 .hyper-view-container ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Color rules styling */
+.hyper-config-body h4 {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(200, 220, 255, 0.75);
+  border-bottom: 1px solid rgba(140, 190, 255, 0.2);
+  padding-bottom: 6px;
+}
+
+.hyper-color-rules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hyper-color-rules-empty {
+  font-size: 11px;
+  color: rgba(180, 200, 230, 0.65);
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.hyper-color-rule {
+  background: rgba(20, 34, 60, 0.65);
+  border: 1px solid rgba(140, 190, 255, 0.25);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hyper-color-rule-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.hyper-color-rule-toggle,
+.hyper-color-rule-delete {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px;
+}
+
+.hyper-color-rule-toggle.is-disabled {
+  opacity: 0.5;
+}
+
+.hyper-color-rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hyper-color-rule-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hyper-color-rule-row label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(188, 208, 240, 0.7);
+}
+
+.hyper-color-rule-row select,
+.hyper-color-rule-row input[type='text'] {
+  background: rgba(28, 46, 80, 0.94);
+  border: 1px solid rgba(160, 208, 255, 0.4);
+  border-radius: 6px;
+  color: rgba(235, 244, 255, 0.96);
+  padding: 5px 8px;
+  font-size: 11px;
+  box-shadow: inset 0 0 8px rgba(8, 14, 28, 0.5);
+  outline: none;
+}
+
+.hyper-color-rule-row input[type='color'] {
+  width: 60px;
+  height: 32px;
+  padding: 2px;
+  background: rgba(28, 46, 80, 0.94);
+  border: 1px solid rgba(160, 208, 255, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.hyper-add-rule-btn {
+  background: rgba(60, 120, 200, 0.85);
+  border: 1px solid rgba(120, 180, 255, 0.55);
+  border-radius: 8px;
+  color: rgba(245, 250, 255, 0.98);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 12px rgba(20, 50, 120, 0.4);
+}
+
+.hyper-add-rule-btn:hover {
+  background: rgba(80, 150, 230, 0.95);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(30, 70, 150, 0.5);
+}
+
+.hyper-config-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: rgba(120, 180, 255, 0.95);
+  cursor: pointer;
+}

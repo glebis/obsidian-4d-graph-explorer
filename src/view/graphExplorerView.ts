@@ -8,7 +8,7 @@ import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
 import type GraphExplorerPlugin from '../main';
-import type { GraphExplorerSettings } from '../main';
+import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
 
 export const HYPER_VIEW_TYPE = 'obsidian-4d-graph-explorer';
 
@@ -631,6 +631,114 @@ export class GraphExplorerView extends ItemView {
       this.settings.showOnlyExistingFiles = value;
       void this.plugin.handleVisualSettingChange();
     });
+
+    // Color rules
+    body.createEl('h4', { text: 'Custom Colors' });
+
+    const colorRulesContainer = body.createDiv({ cls: 'hyper-color-rules-container' });
+
+    const renderColorRules = () => {
+      colorRulesContainer.empty();
+
+      if (this.settings.colorRules.length === 0) {
+        colorRulesContainer.createEl('p', {
+          text: 'No custom color rules. Click "Add Rule" to create one.',
+          cls: 'hyper-color-rules-empty'
+        });
+      }
+
+      this.settings.colorRules.forEach((rule, index) => {
+        const ruleEl = colorRulesContainer.createDiv({ cls: 'hyper-color-rule' });
+
+        const ruleHeader = ruleEl.createDiv({ cls: 'hyper-color-rule-header' });
+
+        const toggleBtn = createIconButton(rule.enabled ? 'eye' : 'eye-off', () => {
+          rule.enabled = !rule.enabled;
+          void this.plugin.handleVisualSettingChange();
+          renderColorRules();
+        }, {
+          title: rule.enabled ? 'Disable rule' : 'Enable rule',
+          ariaLabel: rule.enabled ? 'Disable rule' : 'Enable rule',
+        });
+        toggleBtn.classList.add('hyper-color-rule-toggle');
+        if (!rule.enabled) toggleBtn.classList.add('is-disabled');
+        ruleHeader.appendChild(toggleBtn);
+
+        const deleteBtn = createIconButton('trash-2', () => {
+          this.settings.colorRules.splice(index, 1);
+          void this.plugin.handleVisualSettingChange();
+          renderColorRules();
+        }, {
+          title: 'Delete rule',
+          ariaLabel: 'Delete rule',
+        });
+        deleteBtn.classList.add('hyper-color-rule-delete');
+        ruleHeader.appendChild(deleteBtn);
+
+        const ruleBody = ruleEl.createDiv({ cls: 'hyper-color-rule-body' });
+
+        const typeRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        typeRow.createEl('label', { text: 'Type' });
+        const typeSelect = typeRow.createEl('select');
+        (['tag', 'path', 'filename'] as ColorRuleType[]).forEach((type) => {
+          const option = document.createElement('option');
+          option.value = type;
+          option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+          typeSelect.appendChild(option);
+        });
+        typeSelect.value = rule.type;
+        typeSelect.addEventListener('change', () => {
+          rule.type = typeSelect.value as ColorRuleType;
+          void this.plugin.handleVisualSettingChange();
+        });
+
+        const patternRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        patternRow.createEl('label', { text: 'Pattern' });
+        const patternInput = patternRow.createEl('input', {
+          attr: {
+            type: 'text',
+            placeholder: rule.type === 'tag' ? 'tag1, tag2 or tag1 tag2' : '/regex/ or plain text',
+          },
+        });
+        patternInput.value = rule.pattern;
+        patternInput.addEventListener('input', () => {
+          rule.pattern = patternInput.value;
+          void this.plugin.handleVisualSettingChange();
+        });
+
+        const colorRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        colorRow.createEl('label', { text: 'Color' });
+        const colorInput = colorRow.createEl('input', {
+          attr: {
+            type: 'color',
+          },
+        });
+        colorInput.value = rule.color;
+        colorInput.addEventListener('input', () => {
+          rule.color = colorInput.value;
+          void this.plugin.handleVisualSettingChange();
+        });
+      });
+
+      const addRuleBtn = colorRulesContainer.createEl('button', {
+        text: 'Add Rule',
+        cls: 'hyper-add-rule-btn',
+      });
+      addRuleBtn.addEventListener('click', () => {
+        const newRule: ColorRule = {
+          id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+          type: 'tag',
+          pattern: '',
+          color: '#ff6b6b',
+          enabled: true,
+        };
+        this.settings.colorRules.push(newRule);
+        void this.plugin.handleVisualSettingChange();
+        renderColorRules();
+      });
+    };
+
+    renderColorRules();
   }
 
   private toggleConfigPanel(force?: boolean) {
@@ -807,6 +915,7 @@ export class GraphExplorerView extends ItemView {
             ...option.vaultOptions,
             rootFile: option.vaultOptions.scope === 'local' ? this.app.workspace.getActiveFile() : undefined,
             showOnlyExistingFiles: this.settings.showOnlyExistingFiles,
+            colorRules: this.settings.colorRules,
           };
           if (opts.scope === 'local' && !opts.rootFile) {
             new Notice('Open a note to seed the local vault graph.');
