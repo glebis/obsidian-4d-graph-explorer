@@ -45,6 +45,7 @@ export interface GraphNodeMeta {
   media: Array<unknown>;
   imageUrl: string;
   thumbnailUrl: string;
+  raw: RawGraphNode | null;
 }
 
 export interface GraphLinkMeta {
@@ -455,6 +456,7 @@ function layoutNodes(normalizedNodes: NormalizedNode[]): LayoutResult {
         media: node.media,
         imageUrl: node.imageUrl,
         thumbnailUrl: node.thumbnailUrl,
+        raw: node.raw ?? null,
       };
     });
   });

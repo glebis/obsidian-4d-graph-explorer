@@ -7,6 +7,7 @@ import { composeRotation, applyMatrix, type RotationAngles, type Vec4 } from '..
 import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
+import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
 import type GraphExplorerPlugin from '../main';
 import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
 
@@ -198,6 +199,13 @@ export class GraphExplorerView extends ItemView {
   private state: RenderState;
   private activeObject: HyperObject;
   private transformedVertices: Vec4[] = [];
+  private graphInsights: GraphInsights | null = null;
+  private analysisContainerEl: HTMLDivElement | null = null;
+  private analysisSummaryEl: HTMLDivElement | null = null;
+  private analysisGroupsEl: HTMLDivElement | null = null;
+  private clearHighlightBtn: HTMLButtonElement | null = null;
+  private activeHighlight: GraphHighlight | null = null;
+  private highlightLookup: Map<string, GraphHighlight> = new Map();
   private lastGraphPayload: GraphLabelPayload | null = null;
   private selectedDataset: string;
   private selectedNodeIndex: number | null = null;
@@ -632,6 +640,10 @@ export class GraphExplorerView extends ItemView {
       void this.plugin.handleVisualSettingChange();
     });
 
+    // Insights
+    body.createEl('h4', { text: 'Graph Insights' });
+    this.buildAnalysisSection(body);
+
     // Color rules
     body.createEl('h4', { text: 'Custom Colors' });
 
@@ -739,6 +751,199 @@ export class GraphExplorerView extends ItemView {
     };
 
     renderColorRules();
+  }
+
+  private buildAnalysisSection(parent: HTMLElement) {
+    this.analysisContainerEl = parent.createDiv({ cls: 'hyper-analysis-panel' });
+
+    const header = this.analysisContainerEl.createDiv({ cls: 'hyper-analysis-header' });
+    this.analysisSummaryEl = header.createDiv({ cls: 'hyper-analysis-summary' });
+    const actions = header.createDiv({ cls: 'hyper-analysis-actions' });
+
+    this.clearHighlightBtn = createButton('Clear highlight', () => {
+      this.applyGraphHighlight(null);
+    }, 'Reset analysis highlight');
+    this.clearHighlightBtn.classList.add('hyper-analysis-clear');
+    this.clearHighlightBtn.disabled = true;
+    actions.appendChild(this.clearHighlightBtn);
+
+    this.analysisGroupsEl = this.analysisContainerEl.createDiv({ cls: 'hyper-analysis-groups' });
+
+    this.updateAnalysisUI();
+  }
+
+  private updateAnalysisUI(): void {
+    const summaryEl = this.analysisSummaryEl;
+    const groupsEl = this.analysisGroupsEl;
+    if (!summaryEl || !groupsEl) {
+      return;
+    }
+
+    summaryEl.empty();
+    groupsEl.empty();
+    this.highlightLookup.clear();
+
+    if (!this.graphInsights) {
+      summaryEl.createEl('p', {
+        text: 'Insights appear once a vault graph is loaded.',
+        cls: 'hyper-analysis-empty',
+      });
+      if (this.clearHighlightBtn) {
+        this.clearHighlightBtn.disabled = true;
+      }
+      return;
+    }
+
+    const { overview, groups } = this.graphInsights;
+    const stats = [
+      { label: 'Nodes', value: overview.nodeCount.toString() },
+      { label: 'Links', value: overview.edgeCount.toString() },
+      { label: 'Avg degree', value: overview.averageDegree.toString() },
+      { label: 'Density', value: overview.density.toString() },
+    ];
+    if (overview.componentCount > 1) {
+      stats.push({ label: 'Components', value: overview.componentCount.toString() });
+    }
+
+    const metricsRow = summaryEl.createDiv({ cls: 'hyper-analysis-metrics' });
+    stats.forEach((metric) => {
+      const metricEl = metricsRow.createDiv({ cls: 'hyper-analysis-metric' });
+      metricEl.createEl('span', { cls: 'hyper-analysis-metric-label', text: metric.label });
+      metricEl.createEl('strong', { text: metric.value });
+    });
+
+    if (groups.length === 0) {
+      groupsEl.createEl('p', {
+        text: 'No standout clusters detected yet—try expanding the dataset or adding links.',
+        cls: 'hyper-analysis-empty',
+      });
+      this.updateAnalysisSelectionState();
+      return;
+    }
+
+    groups.forEach((group) => {
+      if (group.items.length === 0) {
+        return;
+      }
+      const groupEl = groupsEl.createDiv({ cls: 'hyper-analysis-group' });
+      const header = groupEl.createDiv({ cls: 'hyper-analysis-group-header' });
+      header.createEl('h5', { text: group.title });
+      if (group.description) {
+        groupEl.createEl('p', { text: group.description, cls: 'hyper-analysis-group-description' });
+      }
+      const list = groupEl.createDiv({ cls: 'hyper-analysis-items' });
+      const maxItems = group.key === 'suggestions' ? 6 : 8;
+      group.items.slice(0, maxItems).forEach((item) => {
+        this.highlightLookup.set(item.id, item);
+        const itemEl = list.createDiv({ cls: 'hyper-analysis-item' });
+        const button = itemEl.createEl('button', { text: item.label, cls: 'hyper-analysis-pill' });
+        button.type = 'button';
+        button.dataset.highlightId = item.id;
+        if (item.description) {
+          button.title = item.description;
+        }
+        button.addEventListener('click', () => {
+          this.handleHighlightClick(item);
+        });
+        if (item.description) {
+          itemEl.createEl('div', { text: item.description, cls: 'hyper-analysis-item-description' });
+        }
+      });
+    });
+
+    this.updateAnalysisSelectionState();
+  }
+
+  private updateAnalysisSelectionState(): void {
+    if (!this.analysisGroupsEl) {
+      return;
+    }
+    const buttons = this.analysisGroupsEl.querySelectorAll<HTMLButtonElement>('button[data-highlight-id]');
+    buttons.forEach((button) => {
+      const isActive = this.activeHighlight?.id === button.dataset.highlightId;
+      button.classList.toggle('is-active', Boolean(isActive));
+    });
+    if (this.clearHighlightBtn) {
+      this.clearHighlightBtn.disabled = !this.activeHighlight;
+    }
+  }
+
+  private handleHighlightClick(item: GraphHighlight): void {
+    if (this.activeHighlight && this.activeHighlight.id === item.id) {
+      this.applyGraphHighlight(null);
+      return;
+    }
+    this.applyGraphHighlight(item);
+  }
+
+  private applyGraphHighlight(item: GraphHighlight | null): void {
+    const meta = this.activeObject?.meta;
+    if (!meta || meta.type !== 'graph') {
+      this.activeHighlight = null;
+      this.state.graph.vertexVisibility = null;
+      this.state.graph.edgeVisibility = null;
+      this.updateAnalysisSelectionState();
+      return;
+    }
+
+    if (!item) {
+      this.activeHighlight = null;
+      this.state.graph.vertexVisibility = null;
+      this.state.graph.edgeVisibility = null;
+      this.updateAnalysisSelectionState();
+      return;
+    }
+
+    const nodeCount = meta.nodes.length;
+    const edgeCount = meta.links.length;
+    const vertexVisibility = new Array(nodeCount).fill(0.08);
+    const vertexSet = new Set<number>();
+    item.nodes.forEach((index) => {
+      if (Number.isInteger(index) && index >= 0 && index < nodeCount) {
+        vertexVisibility[index] = 1;
+        vertexSet.add(index);
+      }
+    });
+
+    const focusEdges = new Set(item.edges ?? []);
+    const edgeVisibility = new Array(edgeCount).fill(0.05);
+    meta.links.forEach((link, index) => {
+      const sourceFocus = vertexSet.has(link.sourceIndex);
+      const targetFocus = vertexSet.has(link.targetIndex);
+      if (focusEdges.has(index) || (sourceFocus && targetFocus)) {
+        edgeVisibility[index] = 1;
+      } else if (sourceFocus || targetFocus) {
+        edgeVisibility[index] = 0.45;
+      }
+    });
+
+    this.state.graph.vertexVisibility = vertexVisibility;
+    this.state.graph.edgeVisibility = edgeVisibility;
+    this.activeHighlight = item;
+    this.updateAnalysisSelectionState();
+    this.showStatus(item.label);
+  }
+
+  private recomputeAnalysis(): void {
+    const meta = this.activeObject?.meta;
+    if (!meta || meta.type !== 'graph') {
+      this.graphInsights = null;
+      this.activeHighlight = null;
+      this.state.graph.vertexVisibility = null;
+      this.state.graph.edgeVisibility = null;
+      this.updateAnalysisUI();
+      return;
+    }
+
+    const previousId = this.activeHighlight?.id ?? null;
+    this.graphInsights = analyzeGraph(meta);
+    this.updateAnalysisUI();
+    if (previousId) {
+      const restored = this.highlightLookup.get(previousId) ?? null;
+      this.applyGraphHighlight(restored ?? null);
+    } else {
+      this.applyGraphHighlight(null);
+    }
   }
 
   private toggleConfigPanel(force?: boolean) {
@@ -926,8 +1131,10 @@ export class GraphExplorerView extends ItemView {
         }
         this.activeObject = replaceNarrativeGraph(graphData, { graphName: option.label });
       }
+      this.activeHighlight = null;
       this.renderer.setObject(this.activeObject);
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
+      this.recomputeAnalysis();
       this.labelElements.forEach((el) => { el.style.display = 'none'; });
       this.showStatus(`${option.label}`);
       this.applyPendingFocus(true);
