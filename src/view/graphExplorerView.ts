@@ -189,6 +189,7 @@ export class GraphExplorerView extends ItemView {
   private showLinksToggleEl!: HTMLInputElement;
   private showOnlyExistingFilesToggleEl!: HTMLInputElement;
   private configToggleBtn!: HTMLButtonElement;
+  private analysisToggleBtn!: HTMLButtonElement;
   private refreshBtn!: HTMLButtonElement;
   private autoRotateBtn!: HTMLButtonElement;
   private nodeInfoEl!: HTMLDivElement;
@@ -206,6 +207,8 @@ export class GraphExplorerView extends ItemView {
   private clearHighlightBtn: HTMLButtonElement | null = null;
   private activeHighlight: GraphHighlight | null = null;
   private highlightLookup: Map<string, GraphHighlight> = new Map();
+  private analysisModalEl: HTMLDivElement | null = null;
+  private analysisVisible = false;
   private lastGraphPayload: GraphLabelPayload | null = null;
   private selectedDataset: string;
   private selectedNodeIndex: number | null = null;
@@ -223,6 +226,12 @@ export class GraphExplorerView extends ItemView {
   private cameraAnimationTarget: { position: [number, number, number]; up: [number, number, number] } | null = null;
   private enableAnimations = true;
   private settings: GraphExplorerSettings;
+  private pointerDownPos = { x: 0, y: 0 };
+  private currentLookAt = new Vector3(0, 0, 0);
+  private isFocusing = false;
+  private uiVisible = true;
+  private isFullscreen = false;
+  private fullscreenBtn!: HTMLButtonElement;
 
   constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
@@ -256,6 +265,14 @@ export class GraphExplorerView extends ItemView {
     this.settings = settings;
     this.state.graph.nodeScale = settings.nodeSizeMultiplier;
     this.state.graph.showLinks = settings.showLinks;
+    this.updateTheme();
+  }
+
+  private updateTheme() {
+    if (!this.renderer) return;
+    const themeId = this.settings.theme;
+    const theme = getTheme(themeId);
+    this.renderer.updateTheme(theme);
   }
 
   getViewType(): string {
@@ -303,7 +320,16 @@ export class GraphExplorerView extends ItemView {
       this.showStatus(`Slice mode: ${this.state.slice.mode}`);
     }, 'Cycle through projection / hyperplane / shadow views');
 
+    this.analysisToggleBtn = createIconButton('git-branch', () => {
+      this.toggleConfigPanel(false);
+      this.toggleAnalysisModal();
+    }, {
+      title: 'Open graph insights',
+      ariaLabel: 'Open graph insights panel',
+    });
+
     this.configToggleBtn = createIconButton('settings', () => {
+      this.toggleAnalysisModal(false);
       this.toggleConfigPanel();
     }, {
       title: 'Open graph settings',
@@ -313,9 +339,11 @@ export class GraphExplorerView extends ItemView {
     this.toolbarEl.appendChild(this.refreshBtn);
     this.toolbarEl.appendChild(this.autoRotateBtn);
     this.toolbarEl.appendChild(sliceBtn);
+    this.toolbarEl.appendChild(this.analysisToggleBtn);
     this.toolbarEl.appendChild(this.configToggleBtn);
 
     this.buildConfigPanel();
+    this.buildAnalysisModal();
     this.updateAutoRotateButton();
     this.updateZoomDisplay();
     this.updateSpeedDisplay();
@@ -330,6 +358,7 @@ export class GraphExplorerView extends ItemView {
     this.nodeInfoEl.style.display = 'none';
 
     this.renderer = new HyperRenderer(this.canvasEl);
+    this.updateTheme();
     this.applyCameraPreset(this.state.camera.preset);
     this.renderer.setGraphLabelCallback((payload: GraphLabelPayload) => this.onGraphPayload(payload));
 
@@ -337,16 +366,39 @@ export class GraphExplorerView extends ItemView {
       canvas: this.canvasEl,
       state: this.state,
       callbacks: {
-        rotation: () => this.requestRender(),
+        rotation: () => {
+          this.requestRender();
+          this.isFocusing = false;
+        },
         slice: () => this.requestRender(),
         autorotate: () => {
           this.updateAutoRotateButton();
           this.requestRender();
+          this.isFocusing = false;
         },
-        zoom: () => this.updateCameraZoom(),
+        zoom: () => {
+          this.updateCameraZoom();
+          this.isFocusing = false;
+        },
+        onTogglePanels: () => this.toggleUI(),
       },
     });
 
+    this.fullscreenBtn = createIconButton('maximize', () => {
+      this.toggleFullscreen();
+    }, {
+      title: 'Enter fullscreen',
+      ariaLabel: 'Enter fullscreen',
+    });
+    this.toolbarEl.appendChild(this.fullscreenBtn);
+
+    document.addEventListener('fullscreenchange', () => {
+      this.updateFullscreenButton();
+    });
+
+    this.canvasEl.addEventListener('pointerdown', (e) => {
+      this.pointerDownPos = { x: e.clientX, y: e.clientY };
+    });
     this.canvasEl.addEventListener('click', (event) => this.handleCanvasClick(event));
     this.canvasEl.addEventListener('dblclick', (event) => this.handleCanvasDoubleClick(event));
 
@@ -360,6 +412,7 @@ export class GraphExplorerView extends ItemView {
       this.animationId = null;
     }
     this.toggleConfigPanel(false);
+    this.toggleAnalysisModal(false);
     this.controls?.dispose();
     this.renderer?.dispose();
   }
@@ -640,10 +693,6 @@ export class GraphExplorerView extends ItemView {
       void this.plugin.handleVisualSettingChange();
     });
 
-    // Insights
-    body.createEl('h4', { text: 'Graph Insights' });
-    this.buildAnalysisSection(body);
-
     // Color rules
     body.createEl('h4', { text: 'Custom Colors' });
 
@@ -753,8 +802,28 @@ export class GraphExplorerView extends ItemView {
     renderColorRules();
   }
 
-  private buildAnalysisSection(parent: HTMLElement) {
-    this.analysisContainerEl = parent.createDiv({ cls: 'hyper-analysis-panel' });
+  private buildAnalysisModal() {
+    if (this.analysisModalEl) {
+      this.analysisModalEl.remove();
+    }
+
+    this.analysisModalEl = this.rootEl.createDiv({
+      cls: 'hyper-analysis-modal',
+      attr: { 'aria-hidden': 'true' },
+    });
+
+    const modalHeader = this.analysisModalEl.createDiv({ cls: 'hyper-analysis-modal-header' });
+    modalHeader.createEl('h3', { text: 'Graph Insights' });
+    const closeBtn = createIconButton('x', () => {
+      this.toggleAnalysisModal(false);
+    }, {
+      title: 'Close insights',
+      ariaLabel: 'Close insights panel',
+    });
+    modalHeader.appendChild(closeBtn);
+
+    const modalBody = this.analysisModalEl.createDiv({ cls: 'hyper-analysis-modal-body' });
+    this.analysisContainerEl = modalBody.createDiv({ cls: 'hyper-analysis-panel' });
 
     const header = this.analysisContainerEl.createDiv({ cls: 'hyper-analysis-header' });
     this.analysisSummaryEl = header.createDiv({ cls: 'hyper-analysis-summary' });
@@ -969,6 +1038,23 @@ export class GraphExplorerView extends ItemView {
     }
   }
 
+  private toggleAnalysisModal(force?: boolean) {
+    if (!this.analysisModalEl) return;
+    if (typeof force === 'boolean') {
+      this.analysisVisible = force;
+    } else {
+      this.analysisVisible = !this.analysisVisible;
+    }
+    this.analysisModalEl.classList.toggle('is-visible', this.analysisVisible);
+    this.analysisModalEl.setAttribute('aria-hidden', this.analysisVisible ? 'false' : 'true');
+    if (this.analysisToggleBtn) {
+      this.analysisToggleBtn.classList.toggle('is-active', this.analysisVisible);
+    }
+    if (this.analysisVisible) {
+      this.updateAnalysisUI();
+    }
+  }
+
   private toggleAutoRotate(force?: boolean) {
     if (typeof force === 'boolean') {
       this.state.autoRotate = force;
@@ -985,6 +1071,42 @@ export class GraphExplorerView extends ItemView {
     setIcon(this.autoRotateBtn, isActive ? 'pause' : 'play');
     this.autoRotateBtn.setAttribute('aria-label', label);
     this.autoRotateBtn.title = label;
+  }
+
+  private toggleUI(force?: boolean) {
+    if (typeof force === 'boolean') {
+      this.uiVisible = force;
+    } else {
+      this.uiVisible = !this.uiVisible;
+    }
+
+    const display = this.uiVisible ? '' : 'none';
+    if (this.toolbarEl) this.toolbarEl.style.display = display;
+    if (this.configPanelEl) this.configPanelEl.style.display = this.uiVisible && this.configVisible ? '' : 'none';
+    if (this.analysisModalEl) this.analysisModalEl.style.display = this.uiVisible && this.analysisVisible ? '' : 'none';
+    if (this.nodeInfoEl) this.nodeInfoEl.style.display = this.uiVisible && this.nodeInfoEl.textContent ? '' : 'none';
+    if (this.imageStripEl) this.imageStripEl.style.display = this.uiVisible && this.imageStripEl.childElementCount > 0 ? '' : 'none';
+  }
+
+  private toggleFullscreen() {
+    if (!this.rootEl) return;
+
+    if (!document.fullscreenElement) {
+      this.rootEl.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  private updateFullscreenButton() {
+    if (!this.fullscreenBtn) return;
+    const isFullscreen = !!document.fullscreenElement;
+    const label = isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+    setIcon(this.fullscreenBtn, isFullscreen ? 'minimize' : 'maximize');
+    this.fullscreenBtn.setAttribute('aria-label', label);
+    this.fullscreenBtn.title = label;
   }
 
   private updateZoomDisplay() {
@@ -1212,6 +1334,7 @@ export class GraphExplorerView extends ItemView {
     if (!this.activeObject) return;
 
     // Animate camera transitions
+    // Animate camera transitions
     if (this.cameraAnimationProgress < 1) {
       this.cameraAnimationProgress = Math.min(1, this.cameraAnimationProgress + (16 / this.cameraAnimationDuration));
       const easeProgress = this.easeOutCubic(this.cameraAnimationProgress);
@@ -1242,6 +1365,18 @@ export class GraphExplorerView extends ItemView {
             this.cameraAnimationTarget = null;
           }
         }
+      }
+    } else {
+      // Handle persistent focus or default lookAt
+      const camera = (this.renderer as any)?.camera;
+      if (camera) {
+        const target = new Vector3(0, 0, 0);
+        if (this.isFocusing && this.selectedNodeIndex !== null && this.transformedVertices[this.selectedNodeIndex]) {
+          const v = this.transformedVertices[this.selectedNodeIndex];
+          target.set(v[0], v[1], v[2]);
+        }
+        this.currentLookAt.lerp(target, 0.1);
+        camera.lookAt(this.currentLookAt);
       }
     }
 
@@ -1334,6 +1469,12 @@ export class GraphExplorerView extends ItemView {
   }
 
   private handleCanvasClick(event: MouseEvent) {
+    const dx = event.clientX - this.pointerDownPos.x;
+    const dy = event.clientY - this.pointerDownPos.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 5) {
+      return;
+    }
+
     const index = this.pickNodeFromEvent(event);
     if (index === null) {
       this.selectNode(null);
@@ -1397,10 +1538,12 @@ export class GraphExplorerView extends ItemView {
     const title = this.nodeInfoEl.createEl('h2');
     title.textContent = node.emoji ? `${node.emoji} ${node.label}` : node.label;
     this.nodeInfoEl.createEl('p', { text: node.summary || 'No summary available yet.' });
-    const category = typeof node.category === 'string' ? node.category.trim() : '';
-    if (category && category.toLowerCase() !== 'none') {
-      this.nodeInfoEl.createEl('p', { text: category });
-    }
+
+    const returnBtn = this.nodeInfoEl.createEl('button', { text: 'Return to Node', cls: 'hyper-node-return-btn' });
+    returnBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.isFocusing = true;
+    });
 
     this.imageStripEl.empty();
     const images = hero ? [hero, ...gallery.filter((url) => url !== hero)] : gallery;

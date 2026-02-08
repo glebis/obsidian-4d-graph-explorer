@@ -529,13 +529,15 @@ export class HyperRenderer {
               slicePositions[base] = vec3[0];
               slicePositions[base + 1] = vec3[1];
               slicePositions[base + 2] = vec3[2];
-              const sliceColor = this.theme.sliceColor({
-                normW: (intersection[3] - wMin) / wRange,
-                depth: (vec3[2] - depthMin) / depthRange,
-              });
-              sliceColors[base] = sliceColor[0];
-              sliceColors[base + 1] = sliceColor[1];
-              sliceColors[base + 2] = sliceColor[2];
+              if (this.theme) {
+                const sliceColor = this.theme.sliceColor({
+                  normW: (intersection[3] - wMin) / wRange,
+                  depth: (vec3[2] - depthMin) / depthRange,
+                });
+                sliceColors[base] = sliceColor[0];
+                sliceColors[base + 1] = sliceColor[1];
+                sliceColors[base + 2] = sliceColor[2];
+              }
               sliceCount += 1;
             }
             if (useShadow) {
@@ -549,16 +551,18 @@ export class HyperRenderer {
               shadowPositions[base + 3] = shadowProjected[0];
               shadowPositions[base + 4] = shadowProjected[1];
               shadowPositions[base + 5] = shadowProjected[2];
-              const shadowColor = this.theme.shadowColor({
-                normW: (intersection[3] - wMin) / wRange,
-                depth: (vec3[2] - depthMin) / depthRange,
-              });
-              shadowColors[base] = shadowColor[0];
-              shadowColors[base + 1] = shadowColor[1];
-              shadowColors[base + 2] = shadowColor[2];
-              shadowColors[base + 3] = shadowColor[0];
-              shadowColors[base + 4] = shadowColor[1];
-              shadowColors[base + 5] = shadowColor[2];
+              if (this.theme) {
+                const shadowColor = this.theme.shadowColor({
+                  normW: (intersection[3] - wMin) / wRange,
+                  depth: (vec3[2] - depthMin) / depthRange,
+                });
+                shadowColors[base] = shadowColor[0];
+                shadowColors[base + 1] = shadowColor[1];
+                shadowColors[base + 2] = shadowColor[2];
+                shadowColors[base + 3] = shadowColor[0];
+                shadowColors[base + 4] = shadowColor[1];
+                shadowColors[base + 5] = shadowColor[2];
+              }
               shadowIndex += 1;
             }
           }

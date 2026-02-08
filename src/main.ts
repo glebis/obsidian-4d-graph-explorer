@@ -21,6 +21,7 @@ export interface GraphExplorerSettings {
   showLinks: boolean;
   showOnlyExistingFiles: boolean;
   colorRules: ColorRule[];
+  theme: string;
 }
 
 const DEFAULT_SETTINGS: GraphExplorerSettings = {
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   showLinks: true,
   showOnlyExistingFiles: true,
   colorRules: [],
+  theme: 'neon',
 };
 
 export default class GraphExplorerPlugin extends Plugin {

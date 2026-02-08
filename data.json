@@ -1,9 +1,54 @@
 {
   "repelForce": 10,
-  "centerForce": 0.93,
-  "linkForce": 1.15,
-  "linkDistance": 0.85,
+  "centerForce": 1.09,
+  "linkForce": 4,
+  "linkDistance": 5.85,
   "nodeSizeMultiplier": 3,
-  "showLinks": true,
-  "showOnlyExistingFiles": false
+  "showLinks": false,
+  "showOnlyExistingFiles": true,
+  "colorRules": [
+    {
+      "id": "rule-1759836569485-ut77sjpmj",
+      "type": "tag",
+      "pattern": "person",
+      "color": "#ff6b6b",
+      "enabled": true
+    },
+    {
+      "id": "rule-1759836581288-caaoebis7",
+      "type": "tag",
+      "pattern": "topic",
+      "color": "#a30096",
+      "enabled": true
+    },
+    {
+      "id": "rule-1759836667521-xo420dbbt",
+      "type": "tag",
+      "pattern": "event",
+      "color": "#1944f0",
+      "enabled": true
+    },
+    {
+      "id": "rule-1759837366180-3ic957mn7",
+      "type": "tag",
+      "pattern": "place",
+      "color": "#e1ff00",
+      "enabled": true
+    },
+    {
+      "id": "rule-1759839532764-6samb9uin",
+      "type": "path",
+      "pattern": "people",
+      "color": "#ff6b6b",
+      "enabled": true
+    },
+    {
+      "id": "rule-1763599103589-hpt110x52",
+      "type": "tag",
+      "pattern": "moc",
+      "color": "#a500e0",
+      "enabled": true
+    }
+  ],
+  "theme": "neon"
 }

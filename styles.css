@@ -297,6 +297,51 @@
   color: rgba(204, 224, 255, 0.9);
 }
 
+.hyper-analysis-modal {
+  position: absolute;
+  top: 64px;
+  right: 18px;
+  width: 560px;
+  max-height: calc(100% - 96px);
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(8, 16, 32, 0.96);
+  border: 1px solid rgba(120, 180, 255, 0.45);
+  box-shadow: 0 20px 44px rgba(5, 12, 26, 0.65);
+  pointer-events: auto;
+  color: rgba(220, 232, 255, 0.94);
+  backdrop-filter: blur(18px);
+  z-index: 1205;
+}
+
+.hyper-analysis-modal.is-visible {
+  display: flex;
+}
+
+.hyper-analysis-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hyper-analysis-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(200, 220, 255, 0.9);
+}
+
+.hyper-analysis-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .hyper-analysis-panel {
   display: flex;
   flex-direction: column;
