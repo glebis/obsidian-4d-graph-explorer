@@ -18,6 +18,9 @@ export interface HyperThemeUi {
   labelBackground: string;
   labelBorder: string;
   labelText: string;
+  missingLabelBackground: string;
+  missingLabelBorder: string;
+  missingLabelText: string;
   labelShadow: string;
   labelTextShadow: string;
   labelFocusBackground: string;
@@ -133,6 +136,9 @@ function withUi(
     labelBackground: 'linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55))',
     labelBorder: 'rgba(120, 180, 255, 0.35)',
     labelText: 'rgba(240, 248, 255, 0.96)',
+    missingLabelBackground: 'linear-gradient(135deg, rgba(88, 54, 14, 0.86), rgba(62, 34, 8, 0.76))',
+    missingLabelBorder: 'rgba(255, 188, 112, 0.62)',
+    missingLabelText: 'rgba(255, 236, 206, 0.98)',
     labelShadow: '0 10px 26px rgba(4, 8, 20, 0.55)',
     labelTextShadow: '0 3px 12px rgba(6, 12, 32, 0.85)',
     labelFocusBackground: 'linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68))',
@@ -183,6 +189,9 @@ function withUi(
     labelBackground: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 241, 255, 0.8))',
     labelBorder: 'rgba(86, 122, 168, 0.36)',
     labelText: 'rgba(28, 42, 64, 0.95)',
+    missingLabelBackground: 'linear-gradient(135deg, rgba(255, 243, 225, 0.96), rgba(255, 233, 198, 0.92))',
+    missingLabelBorder: 'rgba(201, 138, 63, 0.64)',
+    missingLabelText: 'rgba(102, 68, 22, 0.94)',
     labelShadow: '0 10px 20px rgba(132, 162, 200, 0.26)',
     labelTextShadow: '0 1px 0 rgba(255, 255, 255, 0.55)',
     labelFocusBackground: 'linear-gradient(140deg, rgba(121, 179, 255, 0.92), rgba(84, 144, 236, 0.86))',

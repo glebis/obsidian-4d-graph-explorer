@@ -7,6 +7,7 @@ export interface LabelCandidate {
   weight: number;
   fontSize: number;
   focus: boolean;
+  missing: boolean;
 }
 
 function findMinWeightIndex(candidates: LabelCandidate[]): number {

@@ -8,6 +8,9 @@ test('all themes include UI palette values', () => {
   themes.forEach((theme) => {
     assert.equal(theme.ui.mode === 'dark' || theme.ui.mode === 'light', true);
     assert.equal(typeof theme.ui.background, 'string');
+    assert.equal(typeof theme.ui.missingLabelBackground, 'string');
+    assert.equal(typeof theme.ui.missingLabelBorder, 'string');
+    assert.equal(typeof theme.ui.missingLabelText, 'string');
     assert.equal(typeof theme.ui.surfaceShadow, 'string');
     assert.equal(typeof theme.ui.deepShadow, 'string');
     assert.equal(typeof theme.ui.controlShadow, 'string');

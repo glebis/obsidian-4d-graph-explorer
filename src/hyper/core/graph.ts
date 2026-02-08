@@ -108,6 +108,7 @@ export interface ForceLayoutConfig {
 }
 
 const EDGE_TYPE_COLORS: Record<string, number> = {
+  'missing-reference': 0xffb74d,
   therapeutic: 0x4fc3f7,
   romantic: 0xff6f91,
   emotional: 0xffb74d,
@@ -138,6 +139,7 @@ const EDGE_TYPE_COLORS: Record<string, number> = {
 };
 
 const CATEGORY_EMOJI: Record<string, string> = {
+  missing: '⚠️',
   person: '🧑',
   concept: '🧠',
   event: '📅',
@@ -299,7 +301,11 @@ function normalizeNode(node: RawGraphNode | null | undefined, index: number): No
   }
   const id = String(node.id ?? node.label ?? index);
   const label = node.label ?? id;
-  const category = node.category ?? 'uncategorized';
+  const raw = node.raw && typeof node.raw === 'object'
+    ? node.raw as Record<string, unknown>
+    : null;
+  const isMissing = raw?.isMissing === true;
+  const category = isMissing ? 'missing' : (node.category ?? 'uncategorized');
   const importance = Number.isFinite(node.importance) ? Number(node.importance) : null;
 
   // Check if this is a MOC node
@@ -312,15 +318,17 @@ function normalizeNode(node: RawGraphNode | null | undefined, index: number): No
   // MOC nodes get 2x size
   const finalSize = isMoc ? baseSize * 2 : baseSize;
 
-  const summary = node.summary || node.description || '';
-  const emoji = node.emoji || emojiFromCategory(category);
+  const summary = node.summary || node.description || (isMissing ? 'Unresolved link target' : '');
+  const emoji = node.emoji || (isMissing ? CATEGORY_EMOJI.missing : emojiFromCategory(category));
   const media = Array.isArray(node.media) ? node.media : [];
   const imageUrl = node.imageUrl || '';
   const thumbnailUrl = node.thumbnailUrl || '';
 
   // MOC nodes get a distinctive golden color
   let color: [number, number, number];
-  if (isMoc) {
+  if (isMissing) {
+    color = [0.96, 0.66, 0.28];
+  } else if (isMoc) {
     color = [1.0, 0.84, 0.0]; // Golden color for MOC nodes
   } else if (Number.isFinite(node.color)) {
     color = lightenColor(intToRgb(Number(node.color)));

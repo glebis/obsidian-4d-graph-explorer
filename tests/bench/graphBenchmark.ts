@@ -70,6 +70,7 @@ function runLabelSelectionBenchmark(nodeCount: number, runs: number, labelPoolSi
         weight,
         fontSize: 12 + ((i + run) % 7),
         focus: i === run % Math.max(1, nodeCount),
+        missing: false,
       };
       pushCandidateToPool(candidates, candidate, labelPoolSize);
     }

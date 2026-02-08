@@ -252,6 +252,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 
   const nodes: RawGraphNode[] = [];
   const nodeIdByPath = new Map<string, string>();
+  const missingNodesByPath = new Map<string, RawGraphNode>();
   const colorRules = options.colorRules ?? [];
   const includedPaths = new Set(filtered.map((file) => file.path));
 
@@ -305,16 +306,23 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 
   missingNodePaths.forEach((missingPath) => {
     const nodeId = missingPath;
-    nodeIdByPath.set(missingPath, nodeId);
-    nodes.push({
+    const missingNode: RawGraphNode = {
       id: nodeId,
       label: missingPath.split('/').pop() ?? missingPath,
       category: 'missing',
-      summary: 'Missing file reference',
+      summary: 'Unresolved link target',
       importance: 1,
       size: 2.5,
-      raw: { isMissing: true, tags: [] },
-    });
+      raw: {
+        isMissing: true,
+        tags: [],
+        incomingReferences: 0,
+        incomingSources: 0,
+      },
+    };
+    nodeIdByPath.set(missingPath, nodeId);
+    missingNodesByPath.set(missingPath, missingNode);
+    nodes.push(missingNode);
   });
 
   const links: RawGraphLink[] = [];
@@ -328,13 +336,31 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
     Object.entries(outgoing).forEach(([targetPath, count]) => {
       const targetId = nodeIdByPath.get(targetPath);
       if (!targetId) return;
+      const missingNode = missingNodesByPath.get(targetPath);
+      if (missingNode && missingNode.raw && typeof missingNode.raw === 'object') {
+        const raw = missingNode.raw as { incomingReferences?: number; incomingSourcePaths?: Set<string>; incomingSources?: number };
+        raw.incomingReferences = (raw.incomingReferences ?? 0) + count;
+        if (!raw.incomingSourcePaths) {
+          raw.incomingSourcePaths = new Set<string>();
+        }
+        raw.incomingSourcePaths.add(file.path);
+        raw.incomingSources = raw.incomingSourcePaths.size;
+      }
       links.push({
         source: sourceId,
         target: targetId,
         value: count,
-        type: isCanvasFile(file) ? 'canvas' : 'reference',
+        type: missingNode ? 'missing-reference' : (isCanvasFile(file) ? 'canvas' : 'reference'),
       });
     });
+  });
+
+  missingNodesByPath.forEach((node) => {
+    if (!node.raw || typeof node.raw !== 'object') return;
+    const raw = node.raw as { incomingSourcePaths?: Set<string> };
+    if (raw.incomingSourcePaths) {
+      delete raw.incomingSourcePaths;
+    }
   });
 
   const scopeLabel = options.scope === 'global'
@@ -344,7 +370,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   return {
     nodes,
     links,
-    summary: `${nodes.length} nodes · ${links.length} links`,
+    summary: `${nodes.length} nodes · ${links.length} links${missingNodePaths.length > 0 ? ` · ${missingNodePaths.length} unresolved` : ''}`,
     query: scopeLabel,
   };
 }

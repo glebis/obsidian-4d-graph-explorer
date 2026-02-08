@@ -16,6 +16,7 @@ function candidate(overrides: Partial<LabelCandidate> = {}): LabelCandidate {
     weight: 0.5,
     fontSize: 16,
     focus: false,
+    missing: false,
     ...overrides,
   };
 }

@@ -12,6 +12,9 @@
   --hyper-label-bg: linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55));
   --hyper-label-border: rgba(120, 180, 255, 0.35);
   --hyper-label-text: rgba(240, 248, 255, 0.96);
+  --hyper-missing-label-bg: linear-gradient(135deg, rgba(88, 54, 14, 0.86), rgba(62, 34, 8, 0.76));
+  --hyper-missing-label-border: rgba(255, 188, 112, 0.62);
+  --hyper-missing-label-text: rgba(255, 236, 206, 0.98);
   --hyper-label-shadow: 0 10px 26px rgba(4, 8, 20, 0.55);
   --hyper-label-text-shadow: 0 3px 12px rgba(6, 12, 32, 0.85);
   --hyper-label-focus-bg: linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68));
@@ -107,6 +110,13 @@
   box-shadow: var(--hyper-label-focus-shadow);
   color: var(--hyper-label-focus-text);
   text-shadow: var(--hyper-label-focus-text-shadow);
+}
+
+.hyper-label-missing {
+  background: var(--hyper-missing-label-bg);
+  border-color: var(--hyper-missing-label-border);
+  color: var(--hyper-missing-label-text);
+  border-style: dashed;
 }
 
 .hyper-toolbar {

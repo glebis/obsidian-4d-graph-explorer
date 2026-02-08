@@ -85,6 +85,7 @@ interface GraphLabelPayload {
     media?: unknown[];
     imageUrl?: string;
     thumbnailUrl?: string;
+    raw?: unknown | null;
   }>;
   vertexVisibility?: number[] | null;
   graphState?: GraphRenderState | null;
@@ -308,6 +309,9 @@ export class GraphExplorerView extends ItemView {
     style.setProperty('--hyper-label-bg', ui.labelBackground);
     style.setProperty('--hyper-label-border', ui.labelBorder);
     style.setProperty('--hyper-label-text', ui.labelText);
+    style.setProperty('--hyper-missing-label-bg', ui.missingLabelBackground);
+    style.setProperty('--hyper-missing-label-border', ui.missingLabelBorder);
+    style.setProperty('--hyper-missing-label-text', ui.missingLabelText);
     style.setProperty('--hyper-label-shadow', ui.labelShadow);
     style.setProperty('--hyper-label-text-shadow', ui.labelTextShadow);
     style.setProperty('--hyper-label-focus-bg', ui.labelFocusBackground);
@@ -1721,6 +1725,10 @@ export class GraphExplorerView extends ItemView {
     if (!this.lastGraphPayload) return;
     const node = this.lastGraphPayload.labels[index];
     if (!node) return;
+    const raw = node.raw && typeof node.raw === 'object'
+      ? node.raw as Record<string, unknown>
+      : null;
+    const isMissing = raw?.isMissing === true || node.category === 'missing';
 
     const gallery = Array.isArray(node.media) ? (node.media as string[]) : [];
     const hero = node.imageUrl || node.thumbnailUrl || '';
@@ -1731,7 +1739,27 @@ export class GraphExplorerView extends ItemView {
     this.nodeInfoEl.empty();
     const title = this.nodeInfoEl.createEl('h2');
     title.textContent = node.emoji ? `${node.emoji} ${node.label}` : node.label;
-    this.nodeInfoEl.createEl('p', { text: node.summary || 'No summary available yet.' });
+    this.nodeInfoEl.createEl('p', { text: node.summary || (isMissing ? 'Unresolved link target.' : 'No summary available yet.') });
+
+    if (isMissing) {
+      const sourceCount = Number(raw?.incomingSources ?? 0);
+      const referenceCount = Number(raw?.incomingReferences ?? 0);
+      const detailParts: string[] = [];
+      if (referenceCount > 0) {
+        detailParts.push(`${referenceCount} unresolved reference${referenceCount === 1 ? '' : 's'}`);
+      }
+      if (sourceCount > 0) {
+        detailParts.push(`from ${sourceCount} source note${sourceCount === 1 ? '' : 's'}`);
+      }
+      if (detailParts.length > 0) {
+        this.nodeInfoEl.createEl('p', { text: detailParts.join(' ') + '.' });
+      }
+      const openBtn = this.nodeInfoEl.createEl('button', { text: 'Open or create note', cls: 'hyper-node-return-btn' });
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.app.workspace.openLinkText(node.id, '', false);
+      });
+    }
 
     const returnBtn = this.nodeInfoEl.createEl('button', { text: 'Return to Node', cls: 'hyper-node-return-btn' });
     returnBtn.addEventListener('click', (e) => {
@@ -1829,6 +1857,7 @@ export class GraphExplorerView extends ItemView {
       const y = (1 - ndcY) * 0.5 * height;
       const rawLabel = node.label.replace(/^\d{8}-/, '');
       const text = node.emoji ? `${node.emoji} ${rawLabel}` : rawLabel;
+      const missing = node.category === 'missing';
 
       pushCandidateToPool(candidates, {
         index: i,
@@ -1839,6 +1868,7 @@ export class GraphExplorerView extends ItemView {
         weight,
         fontSize,
         focus: focusIndex === i,
+        missing,
       }, MAX_CANDIDATE_POOL);
     }
 
@@ -1861,6 +1891,7 @@ export class GraphExplorerView extends ItemView {
       el.style.zIndex = String(400 + Math.round(candidate.weight * 220));
       el.style.display = 'block';
       el.classList.toggle('hyper-label-focus', candidate.focus);
+      el.classList.toggle('hyper-label-missing', candidate.missing);
       this.visibleLabelIndexes.push(candidate.index);
     }
   }
