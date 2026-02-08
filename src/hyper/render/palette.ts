@@ -5,6 +5,43 @@ export interface ThemeSampleInput {
 
 export type ThemeSampler = (input: ThemeSampleInput) => [number, number, number];
 
+export interface HyperThemeUi {
+  mode: 'dark' | 'light';
+  background: string;
+  overlayText: string;
+  labelBackground: string;
+  labelBorder: string;
+  labelText: string;
+  labelFocusBackground: string;
+  labelFocusBorder: string;
+  labelFocusText: string;
+  toolbarBackground: string;
+  toolbarBorder: string;
+  toolbarText: string;
+  controlBackground: string;
+  controlBorder: string;
+  controlText: string;
+  controlHoverBackground: string;
+  controlHoverShadow: string;
+  imageStripBackground: string;
+  imageStripBorder: string;
+  panelBackground: string;
+  panelBorder: string;
+  panelText: string;
+  panelMutedText: string;
+  analysisBackground: string;
+  analysisPanelBackground: string;
+  metricBackground: string;
+  pillBackground: string;
+  pillBorder: string;
+  pillText: string;
+  pillActiveBackground: string;
+  pillActiveText: string;
+  colorRuleBackground: string;
+  colorRuleBorder: string;
+  scrollbarThumb: string;
+}
+
 export interface HyperThemeDefinition {
   name: string;
   lineOpacity: number;
@@ -15,6 +52,7 @@ export interface HyperThemeDefinition {
   pointColor: ThemeSampler;
   sliceColor: ThemeSampler;
   shadowColor: ThemeSampler;
+  ui: HyperThemeUi;
 }
 
 function hexToRgbArray(hex: string): [number, number, number] {
@@ -65,6 +103,88 @@ function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+function withUi(
+  mode: HyperThemeUi['mode'],
+  overrides: Partial<HyperThemeUi> = {}
+): HyperThemeUi {
+  const darkBase: HyperThemeUi = {
+    mode: 'dark',
+    background: 'radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%)',
+    overlayText: 'rgba(235, 244, 255, 0.92)',
+    labelBackground: 'linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55))',
+    labelBorder: 'rgba(120, 180, 255, 0.35)',
+    labelText: 'rgba(240, 248, 255, 0.96)',
+    labelFocusBackground: 'linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68))',
+    labelFocusBorder: 'rgba(140, 210, 255, 0.55)',
+    labelFocusText: 'rgba(250, 253, 255, 0.98)',
+    toolbarBackground: 'rgba(10, 18, 36, 0.85)',
+    toolbarBorder: 'rgba(140, 190, 255, 0.35)',
+    toolbarText: 'rgba(230, 240, 255, 0.92)',
+    controlBackground: 'rgba(28, 46, 80, 0.92)',
+    controlBorder: 'rgba(160, 208, 255, 0.55)',
+    controlText: 'rgba(235, 244, 255, 0.96)',
+    controlHoverBackground: 'rgba(70, 140, 220, 0.95)',
+    controlHoverShadow: '0 8px 18px rgba(10, 32, 68, 0.45)',
+    imageStripBackground: 'rgba(12, 22, 40, 0.88)',
+    imageStripBorder: 'rgba(140, 190, 255, 0.28)',
+    panelBackground: 'rgba(10, 18, 36, 0.95)',
+    panelBorder: 'rgba(140, 190, 255, 0.38)',
+    panelText: 'rgba(220, 232, 255, 0.94)',
+    panelMutedText: 'rgba(188, 208, 240, 0.78)',
+    analysisBackground: 'rgba(8, 16, 32, 0.96)',
+    analysisPanelBackground: 'rgba(18, 30, 56, 0.55)',
+    metricBackground: 'rgba(12, 22, 40, 0.7)',
+    pillBackground: 'rgba(28, 46, 80, 0.8)',
+    pillBorder: 'rgba(140, 190, 255, 0.3)',
+    pillText: 'rgba(220, 232, 255, 0.92)',
+    pillActiveBackground: 'rgba(110, 180, 255, 0.98)',
+    pillActiveText: 'rgba(10, 26, 46, 0.95)',
+    colorRuleBackground: 'rgba(20, 34, 60, 0.65)',
+    colorRuleBorder: 'rgba(140, 190, 255, 0.25)',
+    scrollbarThumb: 'rgba(150, 205, 255, 0.45)',
+  };
+
+  const lightBase: HyperThemeUi = {
+    mode: 'light',
+    background: 'radial-gradient(circle at 14% 12%, #ffffff 0%, #edf4ff 55%, #d7e4f7 100%)',
+    overlayText: 'rgba(24, 40, 62, 0.92)',
+    labelBackground: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 241, 255, 0.8))',
+    labelBorder: 'rgba(86, 122, 168, 0.36)',
+    labelText: 'rgba(28, 42, 64, 0.95)',
+    labelFocusBackground: 'linear-gradient(140deg, rgba(121, 179, 255, 0.92), rgba(84, 144, 236, 0.86))',
+    labelFocusBorder: 'rgba(58, 107, 182, 0.65)',
+    labelFocusText: 'rgba(250, 253, 255, 0.98)',
+    toolbarBackground: 'rgba(250, 252, 255, 0.88)',
+    toolbarBorder: 'rgba(94, 129, 173, 0.35)',
+    toolbarText: 'rgba(28, 42, 64, 0.92)',
+    controlBackground: 'rgba(240, 246, 255, 0.96)',
+    controlBorder: 'rgba(104, 138, 182, 0.5)',
+    controlText: 'rgba(25, 40, 60, 0.94)',
+    controlHoverBackground: 'rgba(126, 178, 246, 0.95)',
+    controlHoverShadow: '0 8px 18px rgba(72, 120, 188, 0.35)',
+    imageStripBackground: 'rgba(247, 252, 255, 0.92)',
+    imageStripBorder: 'rgba(106, 140, 184, 0.32)',
+    panelBackground: 'rgba(252, 255, 255, 0.95)',
+    panelBorder: 'rgba(104, 138, 182, 0.36)',
+    panelText: 'rgba(30, 44, 66, 0.95)',
+    panelMutedText: 'rgba(68, 92, 124, 0.82)',
+    analysisBackground: 'rgba(252, 255, 255, 0.95)',
+    analysisPanelBackground: 'rgba(233, 242, 255, 0.62)',
+    metricBackground: 'rgba(236, 245, 255, 0.78)',
+    pillBackground: 'rgba(234, 244, 255, 0.88)',
+    pillBorder: 'rgba(105, 142, 188, 0.34)',
+    pillText: 'rgba(29, 46, 68, 0.92)',
+    pillActiveBackground: 'rgba(92, 156, 236, 0.98)',
+    pillActiveText: 'rgba(248, 252, 255, 0.98)',
+    colorRuleBackground: 'rgba(235, 244, 255, 0.82)',
+    colorRuleBorder: 'rgba(110, 142, 184, 0.3)',
+    scrollbarThumb: 'rgba(104, 138, 182, 0.5)',
+  };
+
+  const base = mode === 'light' ? lightBase : darkBase;
+  return { ...base, ...overrides, mode };
+}
+
 const THEMES: Record<string, HyperThemeDefinition> = {
   neon: {
     name: 'Neon Wire',
@@ -89,6 +209,10 @@ const THEMES: Record<string, HyperThemeDefinition> = {
       { at: 0, color: hexToRgbArray('#3f89ff') },
       { at: 1, color: hexToRgbArray('#b368ff') },
     ]),
+    ui: withUi('dark', {
+      background: 'radial-gradient(circle at 18% 16%, #1f2a4b 0%, #070b17 78%)',
+      controlHoverBackground: 'rgba(94, 132, 255, 0.95)',
+    }),
   },
   pastel: {
     name: 'Pastel Solid',
@@ -113,6 +237,11 @@ const THEMES: Record<string, HyperThemeDefinition> = {
       { at: 0, color: hexToRgbArray('#ffe6cf') },
       { at: 1, color: hexToRgbArray('#cde5ff') },
     ]),
+    ui: withUi('light', {
+      background: 'radial-gradient(circle at 16% 12%, #fffefa 0%, #f6fbff 50%, #e5f1ff 100%)',
+      controlHoverBackground: 'rgba(255, 172, 216, 0.95)',
+      pillActiveBackground: 'rgba(255, 156, 209, 0.95)',
+    }),
   },
   heat: {
     name: 'Heat Depth',
@@ -137,6 +266,12 @@ const THEMES: Record<string, HyperThemeDefinition> = {
       { at: 0, color: hexToRgbArray('#5714ff') },
       { at: 1, color: hexToRgbArray('#ff005e') },
     ]),
+    ui: withUi('dark', {
+      background: 'radial-gradient(circle at 16% 12%, #3b2230 0%, #1c121b 42%, #090709 100%)',
+      toolbarBorder: 'rgba(255, 167, 88, 0.4)',
+      controlHoverBackground: 'rgba(255, 134, 72, 0.95)',
+      pillActiveBackground: 'rgba(255, 153, 71, 0.98)',
+    }),
   },
   mono: {
     name: 'Monochrome',
@@ -157,6 +292,42 @@ const THEMES: Record<string, HyperThemeDefinition> = {
       const shade = 0.1 + clamp01(depth) * 0.4;
       return [shade, shade, shade];
     },
+    ui: withUi('dark', {
+      background: 'radial-gradient(circle at 14% 12%, #2a2a2a 0%, #121212 62%, #060606 100%)',
+      toolbarBorder: 'rgba(192, 192, 192, 0.35)',
+      controlHoverBackground: 'rgba(130, 130, 130, 0.95)',
+      pillActiveBackground: 'rgba(208, 208, 208, 0.95)',
+      pillActiveText: 'rgba(18, 18, 18, 0.95)',
+    }),
+  },
+  daylight: {
+    name: 'Daylight',
+    lineOpacity: 0.5,
+    pointOpacity: 0.85,
+    sliceOpacity: 0.92,
+    shadowOpacity: 0.2,
+    lineColor: ({ depth }) => gradientColor(clamp01(depth), [
+      { at: 0, color: hexToRgbArray('#95c2ff') },
+      { at: 0.5, color: hexToRgbArray('#89e5d0') },
+      { at: 1, color: hexToRgbArray('#f6b7a8') },
+    ]),
+    pointColor: ({ normW }) => gradientColor(normW, [
+      { at: 0, color: hexToRgbArray('#72b6ff') },
+      { at: 1, color: hexToRgbArray('#ff9e8a') },
+    ]),
+    sliceColor: ({ depth }) => gradientColor(clamp01(depth), [
+      { at: 0, color: hexToRgbArray('#8ac5ff') },
+      { at: 1, color: hexToRgbArray('#ffd58e') },
+    ]),
+    shadowColor: ({ depth }) => gradientColor(clamp01(depth), [
+      { at: 0, color: hexToRgbArray('#90a8d9') },
+      { at: 1, color: hexToRgbArray('#d4b2e4') },
+    ]),
+    ui: withUi('light', {
+      background: 'radial-gradient(circle at 10% 10%, #ffffff 0%, #eef7ff 52%, #ddeeff 100%)',
+      controlHoverBackground: 'rgba(117, 184, 250, 0.95)',
+      pillActiveBackground: 'rgba(85, 157, 236, 0.98)',
+    }),
   },
 };
 

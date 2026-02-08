@@ -1,10 +1,43 @@
 /* Core layout for the 4D graph view */
 .hyper-view-container {
+  --hyper-background: radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%);
+  --hyper-overlay-text: rgba(235, 244, 255, 0.92);
+  --hyper-label-bg: linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55));
+  --hyper-label-border: rgba(120, 180, 255, 0.35);
+  --hyper-label-text: rgba(240, 248, 255, 0.96);
+  --hyper-label-focus-bg: linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68));
+  --hyper-label-focus-border: rgba(140, 210, 255, 0.55);
+  --hyper-label-focus-text: rgba(250, 253, 255, 0.98);
+  --hyper-toolbar-bg: rgba(10, 18, 36, 0.85);
+  --hyper-toolbar-border: rgba(140, 190, 255, 0.35);
+  --hyper-toolbar-text: rgba(230, 240, 255, 0.92);
+  --hyper-control-bg: rgba(28, 46, 80, 0.92);
+  --hyper-control-border: rgba(160, 208, 255, 0.55);
+  --hyper-control-text: rgba(235, 244, 255, 0.96);
+  --hyper-control-hover-bg: rgba(70, 140, 220, 0.95);
+  --hyper-control-hover-shadow: 0 8px 18px rgba(10, 32, 68, 0.45);
+  --hyper-image-strip-bg: rgba(12, 22, 40, 0.88);
+  --hyper-image-strip-border: rgba(140, 190, 255, 0.28);
+  --hyper-panel-bg: rgba(10, 18, 36, 0.95);
+  --hyper-panel-border: rgba(140, 190, 255, 0.38);
+  --hyper-panel-text: rgba(220, 232, 255, 0.94);
+  --hyper-panel-muted-text: rgba(188, 208, 240, 0.78);
+  --hyper-analysis-bg: rgba(8, 16, 32, 0.96);
+  --hyper-analysis-panel-bg: rgba(18, 30, 56, 0.55);
+  --hyper-metric-bg: rgba(12, 22, 40, 0.7);
+  --hyper-pill-bg: rgba(28, 46, 80, 0.8);
+  --hyper-pill-border: rgba(140, 190, 255, 0.3);
+  --hyper-pill-text: rgba(220, 232, 255, 0.92);
+  --hyper-pill-active-bg: rgba(110, 180, 255, 0.98);
+  --hyper-pill-active-text: rgba(10, 26, 46, 0.95);
+  --hyper-color-rule-bg: rgba(20, 34, 60, 0.65);
+  --hyper-color-rule-border: rgba(140, 190, 255, 0.25);
+  --hyper-scrollbar-thumb: rgba(150, 205, 255, 0.45);
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%);
+  background: var(--hyper-background);
   color: var(--text-normal);
 }
 
@@ -21,7 +54,7 @@
   inset: 0;
   pointer-events: none;
   font-family: var(--font-monospace);
-  color: rgba(235, 244, 255, 0.92);
+  color: var(--hyper-overlay-text);
 }
 
 .hyper-label-layer {
@@ -29,7 +62,7 @@
   inset: 0;
   pointer-events: none;
   font-family: var(--font-interface, var(--font-monospace));
-  color: rgba(232, 240, 255, 0.95);
+  color: var(--hyper-overlay-text);
 }
 
 .hyper-label {
@@ -38,10 +71,10 @@
   white-space: nowrap;
   padding: 3px 10px;
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55));
-  border: 1px solid rgba(120, 180, 255, 0.35);
+  background: var(--hyper-label-bg);
+  border: 1px solid var(--hyper-label-border);
   box-shadow: 0 10px 26px rgba(4, 8, 20, 0.55);
-  color: rgba(240, 248, 255, 0.96);
+  color: var(--hyper-label-text);
   text-shadow: 0 3px 12px rgba(6, 12, 32, 0.85);
   letter-spacing: 0.01em;
   backdrop-filter: blur(6px);
@@ -51,10 +84,10 @@
 
 .hyper-label-focus {
   font-weight: 600;
-  background: linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68));
-  border-color: rgba(140, 210, 255, 0.55);
+  background: var(--hyper-label-focus-bg);
+  border-color: var(--hyper-label-focus-border);
   box-shadow: 0 16px 32px rgba(20, 60, 150, 0.48);
-  color: rgba(250, 253, 255, 0.98);
+  color: var(--hyper-label-focus-text);
   text-shadow: 0 4px 14px rgba(20, 70, 180, 0.68);
 }
 
@@ -69,11 +102,11 @@
   padding: 10px 12px;
   border-radius: 12px;
   backdrop-filter: blur(14px);
-  background: rgba(10, 18, 36, 0.85);
-  border: 1px solid rgba(140, 190, 255, 0.35);
+  background: var(--hyper-toolbar-bg);
+  border: 1px solid var(--hyper-toolbar-border);
   box-shadow: 0 14px 32px rgba(5, 12, 26, 0.55);
   pointer-events: auto;
-  color: rgba(230, 240, 255, 0.92);
+  color: var(--hyper-toolbar-text);
 }
 
 .hyper-toolbar-spacer {
@@ -88,9 +121,9 @@
   height: 32px;
   padding: 0;
   border-radius: 8px;
-  border: 1px solid rgba(160, 208, 255, 0.55);
-  background: rgba(28, 46, 80, 0.92);
-  color: rgba(235, 244, 255, 0.96);
+  border: 1px solid var(--hyper-control-border);
+  background: var(--hyper-control-bg);
+  color: var(--hyper-control-text);
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   box-shadow: 0 6px 14px rgba(12, 24, 48, 0.32);
@@ -104,9 +137,9 @@
 .hyper-icon-button:hover,
 .hyper-icon-button:focus,
 .hyper-icon-button.is-active {
-  background: rgba(70, 140, 220, 0.95);
+  background: var(--hyper-control-hover-bg);
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(10, 32, 68, 0.45);
+  box-shadow: var(--hyper-control-hover-shadow);
 }
 
 .hyper-icon-button:disabled {
@@ -119,14 +152,14 @@
 .hyper-toolbar span {
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: rgba(204, 224, 255, 0.95);
+  color: var(--hyper-toolbar-text);
 }
 
 .hyper-toolbar button:not(.hyper-icon-button),
 .hyper-toolbar select {
-  background: rgba(28, 46, 80, 0.92);
-  color: rgba(235, 244, 255, 0.96);
-  border: 1px solid rgba(160, 208, 255, 0.55);
+  background: var(--hyper-control-bg);
+  color: var(--hyper-control-text);
+  border: 1px solid var(--hyper-control-border);
   border-radius: 7px;
   padding: 5px 12px;
   font-size: 12px;
@@ -139,9 +172,9 @@
 .hyper-toolbar button:not(.hyper-icon-button):focus,
 .hyper-toolbar select:hover,
 .hyper-toolbar select:focus {
-  background: rgba(70, 140, 220, 0.95);
+  background: var(--hyper-control-hover-bg);
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(10, 32, 68, 0.45);
+  box-shadow: var(--hyper-control-hover-shadow);
 }
 
 .hyper-toolbar button:not(.hyper-icon-button):disabled {
@@ -161,10 +194,10 @@
   overflow-x: auto;
   padding: 10px;
   border-radius: 10px;
-  background: rgba(12, 22, 40, 0.88);
-  border: 1px solid rgba(140, 190, 255, 0.28);
+  background: var(--hyper-image-strip-bg);
+  border: 1px solid var(--hyper-image-strip-border);
   pointer-events: auto;
-  color: rgba(215, 230, 255, 0.92);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-image-strip img {
@@ -184,12 +217,12 @@
   max-height: calc(100% - 140px);
   overflow-y: auto;
   padding: 16px;
-  background: rgba(8, 16, 32, 0.9);
+  background: var(--hyper-panel-bg);
   border-radius: 14px;
-  border: 1px solid rgba(150, 205, 255, 0.32);
+  border: 1px solid var(--hyper-panel-border);
   box-shadow: 0 16px 36px rgba(5, 12, 26, 0.55);
   pointer-events: auto;
-  color: rgba(220, 232, 255, 0.94);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-node-info h2 {
@@ -202,7 +235,7 @@
   margin: 6px 0;
   font-size: 13px;
   line-height: 1.55;
-  color: rgba(198, 214, 240, 0.9);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-config-panel {
@@ -216,11 +249,11 @@
   gap: 12px;
   padding: 16px;
   border-radius: 14px;
-  background: rgba(10, 18, 36, 0.95);
-  border: 1px solid rgba(140, 190, 255, 0.38);
+  background: var(--hyper-panel-bg);
+  border: 1px solid var(--hyper-panel-border);
   box-shadow: 0 18px 38px rgba(5, 12, 26, 0.6);
   pointer-events: auto;
-  color: rgba(220, 232, 255, 0.94);
+  color: var(--hyper-panel-text);
   backdrop-filter: blur(16px);
   overflow: hidden;
   z-index: 1200;
@@ -242,7 +275,7 @@
   font-size: 14px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(200, 220, 255, 0.88);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-config-body {
@@ -263,15 +296,15 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(188, 208, 240, 0.78);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-config-row select,
 .hyper-config-row input[type='range'] {
-  background: rgba(28, 46, 80, 0.94);
-  border: 1px solid rgba(160, 208, 255, 0.55);
+  background: var(--hyper-control-bg);
+  border: 1px solid var(--hyper-control-border);
   border-radius: 8px;
-  color: rgba(235, 244, 255, 0.96);
+  color: var(--hyper-control-text);
   padding: 6px 10px;
   font-size: 12px;
   box-shadow: inset 0 0 12px rgba(8, 14, 28, 0.6);
@@ -294,7 +327,7 @@
   min-width: 46px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: rgba(204, 224, 255, 0.9);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-analysis-modal {
@@ -308,11 +341,11 @@
   gap: 12px;
   padding: 18px;
   border-radius: 18px;
-  background: rgba(8, 16, 32, 0.96);
-  border: 1px solid rgba(120, 180, 255, 0.45);
+  background: var(--hyper-analysis-bg);
+  border: 1px solid var(--hyper-panel-border);
   box-shadow: 0 20px 44px rgba(5, 12, 26, 0.65);
   pointer-events: auto;
-  color: rgba(220, 232, 255, 0.94);
+  color: var(--hyper-panel-text);
   backdrop-filter: blur(18px);
   z-index: 1205;
 }
@@ -333,7 +366,7 @@
   font-size: 15px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(200, 220, 255, 0.9);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-analysis-modal-body {
@@ -348,8 +381,8 @@
   gap: 10px;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(18, 30, 56, 0.55);
-  border: 1px solid rgba(140, 190, 255, 0.22);
+  background: var(--hyper-analysis-panel-bg);
+  border: 1px solid var(--hyper-panel-border);
 }
 
 .hyper-analysis-header {
@@ -377,17 +410,17 @@
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 8px;
-  background: rgba(32, 58, 96, 0.88);
-  border: 1px solid rgba(150, 205, 255, 0.35);
-  color: rgba(220, 232, 255, 0.92);
+  background: var(--hyper-control-bg);
+  border: 1px solid var(--hyper-control-border);
+  color: var(--hyper-control-text);
   cursor: pointer;
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .hyper-analysis-clear:hover,
 .hyper-analysis-clear:focus {
-  background: rgba(90, 150, 230, 0.92);
-  box-shadow: 0 6px 16px rgba(12, 24, 48, 0.35);
+  background: var(--hyper-control-hover-bg);
+  box-shadow: var(--hyper-control-hover-shadow);
 }
 
 .hyper-analysis-clear:disabled {
@@ -408,20 +441,20 @@
   gap: 2px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(12, 22, 40, 0.7);
-  border: 1px solid rgba(140, 190, 255, 0.18);
+  background: var(--hyper-metric-bg);
+  border: 1px solid var(--hyper-panel-border);
 }
 
 .hyper-analysis-metric-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(180, 202, 232, 0.75);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-analysis-metric strong {
   font-size: 13px;
-  color: rgba(220, 232, 255, 0.94);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-analysis-groups {
@@ -443,13 +476,13 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(210, 224, 250, 0.85);
+  color: var(--hyper-panel-text);
 }
 
 .hyper-analysis-group-description {
   margin: 0;
   font-size: 11px;
-  color: rgba(186, 202, 232, 0.78);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-analysis-items {
@@ -468,9 +501,9 @@
   width: 100%;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(140, 190, 255, 0.3);
-  background: rgba(28, 46, 80, 0.8);
-  color: rgba(220, 232, 255, 0.92);
+  border: 1px solid var(--hyper-pill-border);
+  background: var(--hyper-pill-bg);
+  color: var(--hyper-pill-text);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -479,26 +512,26 @@
 
 .hyper-analysis-pill:hover,
 .hyper-analysis-pill:focus {
-  background: rgba(70, 140, 220, 0.95);
-  border-color: rgba(170, 216, 255, 0.75);
+  background: var(--hyper-control-hover-bg);
+  border-color: var(--hyper-control-border);
   transform: translateY(-1px);
 }
 
 .hyper-analysis-pill.is-active {
-  background: rgba(110, 180, 255, 0.98);
-  border-color: rgba(210, 236, 255, 0.9);
-  color: rgba(10, 26, 46, 0.95);
+  background: var(--hyper-pill-active-bg);
+  border-color: var(--hyper-control-border);
+  color: var(--hyper-pill-active-text);
   box-shadow: 0 6px 18px rgba(18, 48, 96, 0.45);
 }
 
 .hyper-analysis-item-description {
   font-size: 11px;
-  color: rgba(186, 202, 232, 0.75);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-analysis-empty {
   font-size: 11px;
-  color: rgba(180, 200, 230, 0.68);
+  color: var(--hyper-panel-muted-text);
   font-style: italic;
 }
 
@@ -508,7 +541,7 @@
 }
 
 .hyper-view-container ::-webkit-scrollbar-thumb {
-  background: rgba(150, 205, 255, 0.45);
+  background: var(--hyper-scrollbar-thumb);
   border-radius: 999px;
 }
 
@@ -522,8 +555,8 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(200, 220, 255, 0.75);
-  border-bottom: 1px solid rgba(140, 190, 255, 0.2);
+  color: var(--hyper-panel-text);
+  border-bottom: 1px solid var(--hyper-panel-border);
   padding-bottom: 6px;
 }
 
@@ -535,14 +568,14 @@
 
 .hyper-color-rules-empty {
   font-size: 11px;
-  color: rgba(180, 200, 230, 0.65);
+  color: var(--hyper-panel-muted-text);
   font-style: italic;
   margin: 4px 0;
 }
 
 .hyper-color-rule {
-  background: rgba(20, 34, 60, 0.65);
-  border: 1px solid rgba(140, 190, 255, 0.25);
+  background: var(--hyper-color-rule-bg);
+  border: 1px solid var(--hyper-color-rule-border);
   border-radius: 10px;
   padding: 10px;
   display: flex;
@@ -584,15 +617,15 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(188, 208, 240, 0.7);
+  color: var(--hyper-panel-muted-text);
 }
 
 .hyper-color-rule-row select,
 .hyper-color-rule-row input[type='text'] {
-  background: rgba(28, 46, 80, 0.94);
-  border: 1px solid rgba(160, 208, 255, 0.4);
+  background: var(--hyper-control-bg);
+  border: 1px solid var(--hyper-control-border);
   border-radius: 6px;
-  color: rgba(235, 244, 255, 0.96);
+  color: var(--hyper-control-text);
   padding: 5px 8px;
   font-size: 11px;
   box-shadow: inset 0 0 8px rgba(8, 14, 28, 0.5);
@@ -603,17 +636,17 @@
   width: 60px;
   height: 32px;
   padding: 2px;
-  background: rgba(28, 46, 80, 0.94);
-  border: 1px solid rgba(160, 208, 255, 0.4);
+  background: var(--hyper-control-bg);
+  border: 1px solid var(--hyper-control-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
 .hyper-add-rule-btn {
-  background: rgba(60, 120, 200, 0.85);
-  border: 1px solid rgba(120, 180, 255, 0.55);
+  background: var(--hyper-control-hover-bg);
+  border: 1px solid var(--hyper-control-border);
   border-radius: 8px;
-  color: rgba(245, 250, 255, 0.98);
+  color: var(--hyper-control-text);
   padding: 8px 16px;
   font-size: 12px;
   font-weight: 600;
@@ -623,9 +656,9 @@
 }
 
 .hyper-add-rule-btn:hover {
-  background: rgba(80, 150, 230, 0.95);
+  background: var(--hyper-control-hover-bg);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(30, 70, 150, 0.5);
+  box-shadow: var(--hyper-control-hover-shadow);
 }
 
 .hyper-config-row input[type='checkbox'] {

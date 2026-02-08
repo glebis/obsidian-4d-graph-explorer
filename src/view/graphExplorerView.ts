@@ -280,10 +280,46 @@ export class GraphExplorerView extends ItemView {
   }
 
   private updateTheme() {
-    if (!this.renderer) return;
-    const themeId = this.settings.theme;
-    const theme = getTheme(themeId);
-    this.renderer.updateTheme(theme);
+    const theme = getTheme(this.settings.theme);
+    if (this.renderer) {
+      this.renderer.updateTheme(theme);
+    }
+    if (!this.rootEl) return;
+    const style = this.rootEl.style;
+    const ui = theme.ui;
+    style.setProperty('--hyper-background', ui.background);
+    style.setProperty('--hyper-overlay-text', ui.overlayText);
+    style.setProperty('--hyper-label-bg', ui.labelBackground);
+    style.setProperty('--hyper-label-border', ui.labelBorder);
+    style.setProperty('--hyper-label-text', ui.labelText);
+    style.setProperty('--hyper-label-focus-bg', ui.labelFocusBackground);
+    style.setProperty('--hyper-label-focus-border', ui.labelFocusBorder);
+    style.setProperty('--hyper-label-focus-text', ui.labelFocusText);
+    style.setProperty('--hyper-toolbar-bg', ui.toolbarBackground);
+    style.setProperty('--hyper-toolbar-border', ui.toolbarBorder);
+    style.setProperty('--hyper-toolbar-text', ui.toolbarText);
+    style.setProperty('--hyper-control-bg', ui.controlBackground);
+    style.setProperty('--hyper-control-border', ui.controlBorder);
+    style.setProperty('--hyper-control-text', ui.controlText);
+    style.setProperty('--hyper-control-hover-bg', ui.controlHoverBackground);
+    style.setProperty('--hyper-control-hover-shadow', ui.controlHoverShadow);
+    style.setProperty('--hyper-image-strip-bg', ui.imageStripBackground);
+    style.setProperty('--hyper-image-strip-border', ui.imageStripBorder);
+    style.setProperty('--hyper-panel-bg', ui.panelBackground);
+    style.setProperty('--hyper-panel-border', ui.panelBorder);
+    style.setProperty('--hyper-panel-text', ui.panelText);
+    style.setProperty('--hyper-panel-muted-text', ui.panelMutedText);
+    style.setProperty('--hyper-analysis-bg', ui.analysisBackground);
+    style.setProperty('--hyper-analysis-panel-bg', ui.analysisPanelBackground);
+    style.setProperty('--hyper-metric-bg', ui.metricBackground);
+    style.setProperty('--hyper-pill-bg', ui.pillBackground);
+    style.setProperty('--hyper-pill-border', ui.pillBorder);
+    style.setProperty('--hyper-pill-text', ui.pillText);
+    style.setProperty('--hyper-pill-active-bg', ui.pillActiveBackground);
+    style.setProperty('--hyper-pill-active-text', ui.pillActiveText);
+    style.setProperty('--hyper-color-rule-bg', ui.colorRuleBackground);
+    style.setProperty('--hyper-color-rule-border', ui.colorRuleBorder);
+    style.setProperty('--hyper-scrollbar-thumb', ui.scrollbarThumb);
   }
 
   getViewType(): string {

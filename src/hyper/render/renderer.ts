@@ -5,9 +5,11 @@ import {
   intersectHyperplane,
   clamp,
 } from '../core/math4d';
+import { blendGraphChannel } from './colorThemeMath';
 
 const tempColor = new THREE.Color();
 const tempVec = new THREE.Vector3();
+const GRAPH_THEME_BLEND = 0.74;
 
 const GRAPH_VERTEX_SHADER = `
   attribute float size;
@@ -124,8 +126,7 @@ export class HyperRenderer {
     if (!this.lines) return;
     this.lineMaterial.opacity = resolved.lineOpacity;
     if (this.vertexMaterial.uniforms && this.vertexMaterial.uniforms.opacity) {
-      const graphOpacity = this.isGraph ? 0.75 : resolved.pointOpacity;
-      this.vertexMaterial.uniforms.opacity.value = graphOpacity;
+      this.vertexMaterial.uniforms.opacity.value = resolved.pointOpacity;
     } else if ('opacity' in this.vertexMaterial) {
       this.vertexMaterial.opacity = resolved.pointOpacity;
     }
@@ -297,6 +298,9 @@ export class HyperRenderer {
         this.updateTheme(theme);
       }
     } else {
+      if (theme && theme !== this.theme) {
+        this.updateTheme(theme);
+      }
       theme = this.theme;
       if (this.vertexMaterial.uniforms) {
         const uniforms = this.vertexMaterial.uniforms;
@@ -394,6 +398,13 @@ export class HyperRenderer {
         let colorG = baseColorG;
         let colorB = baseColorB;
 
+        if (theme) {
+          const themedNodeColor = theme.pointColor({ normW, depth: depthNorm });
+          colorR = blendGraphChannel(colorR, themedNodeColor[0], GRAPH_THEME_BLEND);
+          colorG = blendGraphChannel(colorG, themedNodeColor[1], GRAPH_THEME_BLEND);
+          colorB = blendGraphChannel(colorB, themedNodeColor[2], GRAPH_THEME_BLEND);
+        }
+
         if (isFocusNode) {
           const emphasis = clamp(focusStrength, 0, 1);
           const pulse = 0.6 + 0.4 * Math.sin(time * 1.25);
@@ -487,8 +498,24 @@ export class HyperRenderer {
             const link = graphLinks[i];
             const visible = edgeVisibility ? edgeVisibility[i] : 1;
             const weight = 0.25 + visible * 0.75;
-            tempColor.setRGB(link.color[0] * weight, link.color[1] * weight, link.color[2] * weight);
             const base = lineIndex * 6;
+            let colorAR = link.color[0];
+            let colorAG = link.color[1];
+            let colorAB = link.color[2];
+            let colorBR = link.color[0];
+            let colorBG = link.color[1];
+            let colorBB = link.color[2];
+            if (theme) {
+              const themedLineA = theme.lineColor({ normW: normWa, depth: depthA });
+              const themedLineB = theme.lineColor({ normW: normWb, depth: depthB });
+              colorAR = blendGraphChannel(colorAR, themedLineA[0], GRAPH_THEME_BLEND);
+              colorAG = blendGraphChannel(colorAG, themedLineA[1], GRAPH_THEME_BLEND);
+              colorAB = blendGraphChannel(colorAB, themedLineA[2], GRAPH_THEME_BLEND);
+              colorBR = blendGraphChannel(colorBR, themedLineB[0], GRAPH_THEME_BLEND);
+              colorBG = blendGraphChannel(colorBG, themedLineB[1], GRAPH_THEME_BLEND);
+              colorBB = blendGraphChannel(colorBB, themedLineB[2], GRAPH_THEME_BLEND);
+            }
+            tempColor.setRGB(colorAR * weight, colorAG * weight, colorAB * weight);
             positions[base] = a3[0];
             positions[base + 1] = a3[1];
             positions[base + 2] = a3[2];
@@ -498,9 +525,9 @@ export class HyperRenderer {
             colors[base] = tempColor.r;
             colors[base + 1] = tempColor.g;
             colors[base + 2] = tempColor.b;
-            colors[base + 3] = tempColor.r;
-            colors[base + 4] = tempColor.g;
-            colors[base + 5] = tempColor.b;
+            colors[base + 3] = colorBR * weight;
+            colors[base + 4] = colorBG * weight;
+            colors[base + 5] = colorBB * weight;
           } else if (this.theme) {
             const colorA = this.theme.lineColor({ normW: normWa, depth: depthA });
             const colorB = this.theme.lineColor({ normW: normWb, depth: depthB });
