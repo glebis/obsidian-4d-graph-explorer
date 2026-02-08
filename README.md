@@ -46,7 +46,10 @@ npm run dev     # watch mode
 npm run build   # production build
 npx tsc --noEmit  # type-check
 npm test        # run unit tests
+npm run bench:graph  # synthetic large-graph benchmark
 ```
+
+Performance baseline snapshots are tracked in [`docs/performance-baseline.md`](docs/performance-baseline.md).
 
 ## License
 

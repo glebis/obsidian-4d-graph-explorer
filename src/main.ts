@@ -1,6 +1,7 @@
 import { App, Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import { GraphExplorerView, HYPER_VIEW_TYPE } from './view/graphExplorerView';
 import { updateForceLayoutConfig } from './hyper/core/graph';
+import { GraphRefreshScheduler } from './settings/graphRefreshScheduler';
 
 export type ColorRuleType = 'tag' | 'path' | 'filename';
 
@@ -40,12 +41,18 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
 
 export default class GraphExplorerPlugin extends Plugin {
   settings: GraphExplorerSettings = { ...DEFAULT_SETTINGS };
-  private refreshDebounce: number | null = null;
-  private pendingReloadGraph = false;
+  private refreshScheduler: GraphRefreshScheduler | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     this.applyForceLayoutSettings();
+    this.refreshScheduler = new GraphRefreshScheduler({
+      setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimeout: (timerId) => window.clearTimeout(timerId),
+      onRefresh: (reloadGraph) => {
+        void this.refreshGraphViews(reloadGraph);
+      },
+    });
 
     this.registerView(HYPER_VIEW_TYPE, (leaf) => new GraphExplorerView(leaf, this));
 
@@ -71,6 +78,8 @@ export default class GraphExplorerPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.refreshScheduler?.dispose();
+    this.refreshScheduler = null;
     this.app.workspace.getLeavesOfType(HYPER_VIEW_TYPE).forEach((leaf) => leaf.detach());
   }
 
@@ -108,21 +117,11 @@ export default class GraphExplorerPlugin extends Plugin {
   }
 
   private scheduleGraphRefresh(reloadGraph: boolean): void {
-    if (reloadGraph) {
-      this.pendingReloadGraph = true;
+    if (!this.refreshScheduler) {
+      void this.refreshGraphViews(reloadGraph);
+      return;
     }
-    const trigger = () => {
-      const shouldReload = this.pendingReloadGraph;
-      this.pendingReloadGraph = false;
-      this.refreshDebounce = null;
-      void this.refreshGraphViews(shouldReload);
-    };
-
-    if (this.refreshDebounce !== null) {
-      window.clearTimeout(this.refreshDebounce);
-    }
-    const delay = this.pendingReloadGraph ? 600 : 200;
-    this.refreshDebounce = window.setTimeout(trigger, delay);
+    this.refreshScheduler.schedule(reloadGraph);
   }
 
   async refreshGraphViews(reloadGraph: boolean): Promise<void> {

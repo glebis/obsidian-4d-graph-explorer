@@ -7,7 +7,8 @@
     "dev": "node esbuild.config.mjs --watch",
     "build": "node esbuild.config.mjs --prod",
     "test": "npm run test:unit",
-    "test:unit": "rm -rf .test-dist && npx tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.test.js"
+    "test:unit": "rm -rf .test-dist && npx tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.test.js",
+    "bench:graph": "rm -rf .test-dist && npx tsc -p tsconfig.test.json && node .test-dist/tests/bench/graphBenchmark.js"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",

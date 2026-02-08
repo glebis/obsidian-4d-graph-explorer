@@ -9,6 +9,7 @@ import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
 import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
 import { pickVisibleLabels, pushCandidateToPool, type LabelCandidate } from './labelSelection';
+import { visualSettingRefreshOptions, type VisualSettingAction } from '../settings/visualSettingPolicy';
 import type GraphExplorerPlugin from '../main';
 import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
 
@@ -505,6 +506,10 @@ export class GraphExplorerView extends ItemView {
     }
   }
 
+  private notifyVisualSettingChange(action: VisualSettingAction): void {
+    void this.plugin.handleVisualSettingChange(visualSettingRefreshOptions(action));
+  }
+
   private buildConfigPanel() {
     this.configPanelEl = this.rootEl.createDiv({ cls: 'hyper-config-panel', attr: { 'aria-hidden': 'true' } });
 
@@ -543,7 +548,7 @@ export class GraphExplorerView extends ItemView {
       this.settings.theme = this.themeSelectEl.value;
       this.state.themeId = this.themeSelectEl.value;
       this.updateTheme();
-      void this.plugin.handleVisualSettingChange();
+      this.notifyVisualSettingChange('theme');
     });
 
     const fontRow = body.createDiv({ cls: 'hyper-config-row' });
@@ -568,7 +573,7 @@ export class GraphExplorerView extends ItemView {
     this.fontSelectEl.addEventListener('change', () => {
       this.settings.labelFont = this.fontSelectEl.value;
       this.applyLabelFont();
-      void this.plugin.handleVisualSettingChange();
+      this.notifyVisualSettingChange('label-font');
     });
 
     const cameraRow = body.createDiv({ cls: 'hyper-config-row' });
@@ -765,7 +770,7 @@ export class GraphExplorerView extends ItemView {
       if (!Number.isFinite(value)) return;
       this.settings.nodeSizeMultiplier = value;
       this.state.graph.nodeScale = value;
-      void this.plugin.handleVisualSettingChange();
+      this.notifyVisualSettingChange('node-size');
       this.updateNodeSizeDisplay();
     });
     this.nodeSizeValueEl = nodeSizeControl.createEl('span', { cls: 'hyper-config-value' });
@@ -784,7 +789,7 @@ export class GraphExplorerView extends ItemView {
       const value = (event.target as HTMLInputElement).checked;
       this.settings.showLinks = value;
       this.state.graph.showLinks = value;
-      void this.plugin.handleVisualSettingChange();
+      this.notifyVisualSettingChange('show-links');
     });
 
     const showOnlyExistingFilesRow = body.createDiv({ cls: 'hyper-config-row' });
@@ -800,7 +805,7 @@ export class GraphExplorerView extends ItemView {
     this.showOnlyExistingFilesToggleEl.addEventListener('change', (event) => {
       const value = (event.target as HTMLInputElement).checked;
       this.settings.showOnlyExistingFiles = value;
-      void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+      this.notifyVisualSettingChange('show-only-existing-files');
     });
 
     // Color rules
@@ -825,7 +830,7 @@ export class GraphExplorerView extends ItemView {
 
         const toggleBtn = createIconButton(rule.enabled ? 'eye' : 'eye-off', () => {
           rule.enabled = !rule.enabled;
-          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+          this.notifyVisualSettingChange('color-rules');
           renderColorRules();
         }, {
           title: rule.enabled ? 'Disable rule' : 'Enable rule',
@@ -837,7 +842,7 @@ export class GraphExplorerView extends ItemView {
 
         const deleteBtn = createIconButton('trash-2', () => {
           this.settings.colorRules.splice(index, 1);
-          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+          this.notifyVisualSettingChange('color-rules');
           renderColorRules();
         }, {
           title: 'Delete rule',
@@ -860,7 +865,7 @@ export class GraphExplorerView extends ItemView {
         typeSelect.value = rule.type;
         typeSelect.addEventListener('change', () => {
           rule.type = typeSelect.value as ColorRuleType;
-          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+          this.notifyVisualSettingChange('color-rules');
         });
 
         const patternRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
@@ -874,7 +879,7 @@ export class GraphExplorerView extends ItemView {
         patternInput.value = rule.pattern;
         patternInput.addEventListener('input', () => {
           rule.pattern = patternInput.value;
-          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+          this.notifyVisualSettingChange('color-rules');
         });
 
         const colorRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
@@ -887,7 +892,7 @@ export class GraphExplorerView extends ItemView {
         colorInput.value = rule.color;
         colorInput.addEventListener('input', () => {
           rule.color = colorInput.value;
-          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+          this.notifyVisualSettingChange('color-rules');
         });
       });
 
@@ -904,7 +909,7 @@ export class GraphExplorerView extends ItemView {
           enabled: true,
         };
         this.settings.colorRules.push(newRule);
-        void this.plugin.handleVisualSettingChange({ reloadGraph: true });
+        this.notifyVisualSettingChange('color-rules');
         renderColorRules();
       });
     };
