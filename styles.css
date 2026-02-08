@@ -69,6 +69,9 @@
   position: absolute;
   transform: translate(-50%, -50%);
   white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 3px 10px;
   border-radius: 10px;
   background: var(--hyper-label-bg);

@@ -1672,9 +1672,9 @@ export class GraphExplorerView extends ItemView {
 
     const { positions, labels, vertexVisibility } = payload;
     const focusIndex = this.selectedNodeIndex ?? -1;
-    const MAX_VISIBLE_LABELS = 48;
-    const MIN_VISIBILITY = 0.04;
-    const MIN_OPACITY = 0.12;
+    const MAX_VISIBLE_LABELS = 24;
+    const MIN_VISIBILITY = 0.15;
+    const MIN_OPACITY = 0.25;
 
     type LabelCandidate = {
       index: number;
@@ -1718,16 +1718,17 @@ export class GraphExplorerView extends ItemView {
       if (Math.abs(ndcX) > 1.2 || Math.abs(ndcY) > 1.2) continue;
 
       const depthNorm = Math.min(1, Math.max(0, (this.tempVec.z + 1) * 0.5));
-      const depthFactor = 1 - Math.pow(depthNorm, 1.22);
+      const depthFactor = 1 - Math.pow(depthNorm, 1.8);
       const radialFalloff = 1 - Math.min(1, Math.hypot(ndcX, ndcY) / 1.35);
       const focusBoost = focusIndex === i ? 1.6 : 1;
       const weight = visibility * (0.45 + depthFactor * 0.55) * (0.55 + radialFalloff * 0.45) * focusBoost;
       const opacity = focusIndex === i ? 1 : Math.min(1, Math.max(MIN_OPACITY, weight));
       const baseSize = focusIndex === i ? 21 : 14;
-      const fontSize = baseSize + depthFactor * 8 + visibility * 4;
+      const fontSize = Math.max(11, baseSize + depthFactor * 8 + visibility * 4);
       const x = (ndcX + 1) * 0.5 * width;
       const y = (1 - ndcY) * 0.5 * height;
-      const text = node.emoji ? `${node.emoji} ${node.label}` : node.label;
+      const rawLabel = node.label.replace(/^\d{8}-/, '');
+      const text = node.emoji ? `${node.emoji} ${rawLabel}` : rawLabel;
 
       candidates.push({
         index: i,
@@ -1759,10 +1760,12 @@ export class GraphExplorerView extends ItemView {
       }
       let overlaps = false;
       for (const existing of visible) {
-        const dx = candidate.x - existing.x;
-        const dy = candidate.y - existing.y;
-        const threshold = Math.max(28, (candidate.fontSize + existing.fontSize) * 0.34);
-        if (dx * dx + dy * dy < threshold * threshold) {
+        const dx = Math.abs(candidate.x - existing.x);
+        const dy = Math.abs(candidate.y - existing.y);
+        const avgFontSize = (candidate.fontSize + existing.fontSize) * 0.5;
+        const hThreshold = Math.max(40, (candidate.text.length + existing.text.length) * 0.5 * avgFontSize * 0.38);
+        const vThreshold = Math.max(18, avgFontSize * 1.1);
+        if (dx < hThreshold && dy < vThreshold) {
           overlaps = true;
           break;
         }
