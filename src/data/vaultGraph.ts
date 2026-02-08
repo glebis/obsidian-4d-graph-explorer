@@ -7,6 +7,7 @@ import {
   compileIgnorePattern,
   getCustomColorForFile,
 } from './vaultGraphRules';
+import { type DegreeMaps, resolvedLinkDerivedCache } from './linkMaps';
 
 export type VaultGraphScope = 'global' | 'local';
 
@@ -21,12 +22,8 @@ export interface VaultGraphOptions {
   colorRules?: ColorRule[];
 }
 
-interface DegreeMaps {
-  outgoing: Map<string, number>;
-  incoming: Map<string, number>;
-}
-
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'tiff']);
+const noteSummaryCache = new Map<string, { mtime: number; summary: string }>();
 
 function isFileExcluded(app: App, file: TFile): boolean {
   // Access Obsidian's user ignore filters from vault config
@@ -45,32 +42,6 @@ function isFileExcluded(app: App, file: TFile): boolean {
   }
 
   return false;
-}
-
-function buildDegreeMaps(resolvedLinks: Record<string, Record<string, number>>): DegreeMaps {
-  const outgoing = new Map<string, number>();
-  const incoming = new Map<string, number>();
-
-  Object.entries(resolvedLinks).forEach(([source, targets]) => {
-    const totalOutgoing = Object.values(targets).reduce((sum, count) => sum + count, 0);
-    outgoing.set(source, totalOutgoing);
-    Object.entries(targets).forEach(([target, count]) => {
-      incoming.set(target, (incoming.get(target) ?? 0) + count);
-    });
-  });
-
-  return { outgoing, incoming };
-}
-
-function collectReverseLinks(resolvedLinks: Record<string, Record<string, number>>): Map<string, Set<string>> {
-  const reverse = new Map<string, Set<string>>();
-  Object.entries(resolvedLinks).forEach(([source, targets]) => {
-    Object.keys(targets).forEach((target) => {
-      if (!reverse.has(target)) reverse.set(target, new Set());
-      reverse.get(target)!.add(source);
-    });
-  });
-  return reverse;
 }
 
 function isCanvasFile(file: TFile): boolean {
@@ -110,16 +81,25 @@ async function extractNoteSummary(app: App, file: TFile, cache: CachedMetadata |
     if (heading) return trimSummary(heading.trim());
   }
 
+  const cached = noteSummaryCache.get(file.path);
+  if (cached && cached.mtime === file.stat.mtime) {
+    return cached.summary;
+  }
+
   try {
     const content = await app.vault.cachedRead(file);
     const lines = content
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith('#'));
-    if (lines.length === 0) return '';
-    return trimSummary(lines[0]);
+    const summary = lines.length === 0 ? '' : trimSummary(lines[0]);
+    noteSummaryCache.set(file.path, { mtime: file.stat.mtime, summary });
+    return summary;
   } catch (error) {
     console.warn('[vaultGraph] Failed to read file for summary', file.path, error);
+    if (cached) {
+      return cached.summary;
+    }
     return '';
   }
 }
@@ -263,8 +243,9 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   const showOnlyExistingFiles = options.showOnlyExistingFiles ?? true;
 
   const resolvedLinks = app.metadataCache.resolvedLinks;
-  const reverseLinks = collectReverseLinks(resolvedLinks);
-  const degreeMaps = buildDegreeMaps(resolvedLinks);
+  const derivedLinks = resolvedLinkDerivedCache.get(resolvedLinks);
+  const reverseLinks = derivedLinks.reverseLinks;
+  const degreeMaps = derivedLinks.degreeMaps;
 
   let targetFiles: TFile[] = [];
   if (options.scope === 'global') {
@@ -383,3 +364,10 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
     query: scopeLabel,
   };
 }
+
+export const __vaultGraphInternals = {
+  clearCaches(): void {
+    noteSummaryCache.clear();
+    resolvedLinkDerivedCache.clear();
+  },
+};

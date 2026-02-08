@@ -1,4 +1,5 @@
 import type { Vec4 } from './math4d';
+import { planForceLayoutExecution } from './forceLayoutPlan';
 
 export interface RawGraphNode {
   id?: string | number;
@@ -515,7 +516,8 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
   const count = vertices.length;
   if (count === 0) return;
 
-  const iterations = Math.min(160, Math.max(1, Math.round(config.iterations || DEFAULT_FORCE_LAYOUT.iterations)));
+  const plan = planForceLayoutExecution(count, config.iterations || DEFAULT_FORCE_LAYOUT.iterations);
+  const iterations = plan.iterations;
   const repel = Math.max(0, config.repelForce);
   const center = Math.max(0, config.centerForce);
   const linkStrength = Math.max(0, config.linkForce);
@@ -539,28 +541,59 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
     }
 
     if (repel > 0) {
-      for (let i = 0; i < count; i += 1) {
-        for (let j = i + 1; j < count; j += 1) {
-          const pi = positions[i];
-          const pj = positions[j];
-          let dx = pi[0] - pj[0];
-          let dy = pi[1] - pj[1];
-          let dz = pi[2] - pj[2];
-          let dw = pi[3] - pj[3];
-          const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
-          const scale = repel / distSq;
-          dx *= scale;
-          dy *= scale;
-          dz *= scale;
-          dw *= scale;
-          forces[i][0] += dx;
-          forces[i][1] += dy;
-          forces[i][2] += dz;
-          forces[i][3] += dw;
-          forces[j][0] -= dx;
-          forces[j][1] -= dy;
-          forces[j][2] -= dz;
-          forces[j][3] -= dw;
+      if (plan.useApproximateRepulsion && plan.repulsionOffsets.length > 0) {
+        for (let offsetIndex = 0; offsetIndex < plan.repulsionOffsets.length; offsetIndex += 1) {
+          const baseOffset = plan.repulsionOffsets[offsetIndex];
+          const rotatedOffset = (baseOffset + iter * 3) % count || 1;
+          for (let i = 0; i < count; i += 1) {
+            const j = (i + rotatedOffset) % count;
+            if (j <= i) continue;
+            const pi = positions[i];
+            const pj = positions[j];
+            let dx = pi[0] - pj[0];
+            let dy = pi[1] - pj[1];
+            let dz = pi[2] - pj[2];
+            let dw = pi[3] - pj[3];
+            const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
+            const scale = repel / distSq;
+            dx *= scale;
+            dy *= scale;
+            dz *= scale;
+            dw *= scale;
+            forces[i][0] += dx;
+            forces[i][1] += dy;
+            forces[i][2] += dz;
+            forces[i][3] += dw;
+            forces[j][0] -= dx;
+            forces[j][1] -= dy;
+            forces[j][2] -= dz;
+            forces[j][3] -= dw;
+          }
+        }
+      } else {
+        for (let i = 0; i < count; i += 1) {
+          for (let j = i + 1; j < count; j += 1) {
+            const pi = positions[i];
+            const pj = positions[j];
+            let dx = pi[0] - pj[0];
+            let dy = pi[1] - pj[1];
+            let dz = pi[2] - pj[2];
+            let dw = pi[3] - pj[3];
+            const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
+            const scale = repel / distSq;
+            dx *= scale;
+            dy *= scale;
+            dz *= scale;
+            dw *= scale;
+            forces[i][0] += dx;
+            forces[i][1] += dy;
+            forces[i][2] += dz;
+            forces[i][3] += dw;
+            forces[j][0] -= dx;
+            forces[j][1] -= dy;
+            forces[j][2] -= dz;
+            forces[j][3] -= dw;
+          }
         }
       }
     }
