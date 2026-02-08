@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
 export default class GraphExplorerPlugin extends Plugin {
   settings: GraphExplorerSettings = { ...DEFAULT_SETTINGS };
   private refreshDebounce: number | null = null;
+  private pendingReloadGraph = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -98,21 +99,28 @@ export default class GraphExplorerPlugin extends Plugin {
     this.scheduleGraphRefresh(true);
   }
 
-  async handleVisualSettingChange(): Promise<void> {
+  async handleVisualSettingChange(options: { reloadGraph?: boolean } = {}): Promise<void> {
+    const { reloadGraph = false } = options;
     await this.saveSettings();
-    this.scheduleGraphRefresh(false);
+    this.scheduleGraphRefresh(reloadGraph);
   }
 
   private scheduleGraphRefresh(reloadGraph: boolean): void {
+    if (reloadGraph) {
+      this.pendingReloadGraph = true;
+    }
     const trigger = () => {
+      const shouldReload = this.pendingReloadGraph;
+      this.pendingReloadGraph = false;
       this.refreshDebounce = null;
-      void this.refreshGraphViews(reloadGraph);
+      void this.refreshGraphViews(shouldReload);
     };
 
     if (this.refreshDebounce !== null) {
       window.clearTimeout(this.refreshDebounce);
     }
-    this.refreshDebounce = window.setTimeout(trigger, reloadGraph ? 600 : 200);
+    const delay = this.pendingReloadGraph ? 600 : 200;
+    this.refreshDebounce = window.setTimeout(trigger, delay);
   }
 
   async refreshGraphViews(reloadGraph: boolean): Promise<void> {

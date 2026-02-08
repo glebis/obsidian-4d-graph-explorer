@@ -302,7 +302,7 @@ function describeTags(meta: GraphMeta, nodes: number[]): string {
   const tags = new Map<string, number>();
   nodes.forEach((index) => {
     const raw = meta.nodes[index]?.raw;
-    const nodeTags = raw && typeof raw === 'object' && 'raw' in raw && (raw as any).raw?.tags;
+    const nodeTags = raw && typeof raw === 'object' && 'tags' in raw ? (raw as any).tags : null;
     if (Array.isArray(nodeTags)) {
       nodeTags.forEach((tag: unknown) => {
         if (typeof tag !== 'string') return;

@@ -217,6 +217,8 @@ export class GraphExplorerView extends ItemView {
   private themeCycle = themeList();
   private focusStrength = 0;
   private pendingFocusPath: string | null = null;
+  private lastLocalRootPath: string | null = null;
+  private localDatasetReloadDebounce: number | null = null;
   private previousVertices: Vec4[] = [];
   private animationProgress = 1;
   private animationDuration = 600;
@@ -232,6 +234,11 @@ export class GraphExplorerView extends ItemView {
   private uiVisible = true;
   private isFullscreen = false;
   private fullscreenBtn!: HTMLButtonElement;
+  private lastLabelRenderAt = 0;
+  private labelsDirty = false;
+  private readonly fullscreenChangeHandler = () => {
+    this.updateFullscreenButton();
+  };
 
   constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
@@ -246,7 +253,7 @@ export class GraphExplorerView extends ItemView {
       camera: { zoom: 1, preset: 'axial-front' },
       autoRotate: false,
       autoSpeed: 0.42,
-      themeId: 'neon',
+      themeId: this.settings.theme,
       graph: {
         focusNode: null,
         focusStrength: 0,
@@ -263,8 +270,12 @@ export class GraphExplorerView extends ItemView {
 
   applySettings(settings: GraphExplorerSettings): void {
     this.settings = settings;
+    this.state.themeId = settings.theme;
     this.state.graph.nodeScale = settings.nodeSizeMultiplier;
     this.state.graph.showLinks = settings.showLinks;
+    if (this.themeSelectEl) {
+      this.themeSelectEl.value = settings.theme;
+    }
     this.updateTheme();
   }
 
@@ -392,9 +403,7 @@ export class GraphExplorerView extends ItemView {
     });
     this.toolbarEl.appendChild(this.fullscreenBtn);
 
-    document.addEventListener('fullscreenchange', () => {
-      this.updateFullscreenButton();
-    });
+    document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
 
     this.canvasEl.addEventListener('pointerdown', (e) => {
       this.pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -411,6 +420,11 @@ export class GraphExplorerView extends ItemView {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+    if (this.localDatasetReloadDebounce !== null) {
+      window.clearTimeout(this.localDatasetReloadDebounce);
+      this.localDatasetReloadDebounce = null;
+    }
+    document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
     this.toggleConfigPanel(false);
     this.toggleAnalysisModal(false);
     this.controls?.dispose();
@@ -456,9 +470,12 @@ export class GraphExplorerView extends ItemView {
     themeRow.createEl('label', { text: 'Theme', attr: { for: themeId } });
     this.themeSelectEl = themeRow.createEl('select', { attr: { id: themeId } });
     this.themeCycle.forEach((theme) => createOption(this.themeSelectEl, { id: theme.id, label: theme.name }));
-    this.themeSelectEl.value = this.state.themeId;
+    this.themeSelectEl.value = this.settings.theme;
     this.themeSelectEl.addEventListener('change', () => {
+      this.settings.theme = this.themeSelectEl.value;
       this.state.themeId = this.themeSelectEl.value;
+      this.updateTheme();
+      void this.plugin.handleVisualSettingChange();
     });
 
     const cameraRow = body.createDiv({ cls: 'hyper-config-row' });
@@ -690,7 +707,7 @@ export class GraphExplorerView extends ItemView {
     this.showOnlyExistingFilesToggleEl.addEventListener('change', (event) => {
       const value = (event.target as HTMLInputElement).checked;
       this.settings.showOnlyExistingFiles = value;
-      void this.plugin.handleVisualSettingChange();
+      void this.plugin.handleVisualSettingChange({ reloadGraph: true });
     });
 
     // Color rules
@@ -715,7 +732,7 @@ export class GraphExplorerView extends ItemView {
 
         const toggleBtn = createIconButton(rule.enabled ? 'eye' : 'eye-off', () => {
           rule.enabled = !rule.enabled;
-          void this.plugin.handleVisualSettingChange();
+          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
           renderColorRules();
         }, {
           title: rule.enabled ? 'Disable rule' : 'Enable rule',
@@ -727,7 +744,7 @@ export class GraphExplorerView extends ItemView {
 
         const deleteBtn = createIconButton('trash-2', () => {
           this.settings.colorRules.splice(index, 1);
-          void this.plugin.handleVisualSettingChange();
+          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
           renderColorRules();
         }, {
           title: 'Delete rule',
@@ -750,7 +767,7 @@ export class GraphExplorerView extends ItemView {
         typeSelect.value = rule.type;
         typeSelect.addEventListener('change', () => {
           rule.type = typeSelect.value as ColorRuleType;
-          void this.plugin.handleVisualSettingChange();
+          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
         });
 
         const patternRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
@@ -764,7 +781,7 @@ export class GraphExplorerView extends ItemView {
         patternInput.value = rule.pattern;
         patternInput.addEventListener('input', () => {
           rule.pattern = patternInput.value;
-          void this.plugin.handleVisualSettingChange();
+          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
         });
 
         const colorRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
@@ -777,7 +794,7 @@ export class GraphExplorerView extends ItemView {
         colorInput.value = rule.color;
         colorInput.addEventListener('input', () => {
           rule.color = colorInput.value;
-          void this.plugin.handleVisualSettingChange();
+          void this.plugin.handleVisualSettingChange({ reloadGraph: true });
         });
       });
 
@@ -794,7 +811,7 @@ export class GraphExplorerView extends ItemView {
           enabled: true,
         };
         this.settings.colorRules.push(newRule);
-        void this.plugin.handleVisualSettingChange();
+        void this.plugin.handleVisualSettingChange({ reloadGraph: true });
         renderColorRules();
       });
     };
@@ -951,6 +968,7 @@ export class GraphExplorerView extends ItemView {
       this.activeHighlight = null;
       this.state.graph.vertexVisibility = null;
       this.state.graph.edgeVisibility = null;
+      this.markLabelsDirty(true);
       this.updateAnalysisSelectionState();
       return;
     }
@@ -959,6 +977,7 @@ export class GraphExplorerView extends ItemView {
       this.activeHighlight = null;
       this.state.graph.vertexVisibility = null;
       this.state.graph.edgeVisibility = null;
+      this.markLabelsDirty(true);
       this.updateAnalysisSelectionState();
       return;
     }
@@ -989,6 +1008,7 @@ export class GraphExplorerView extends ItemView {
     this.state.graph.vertexVisibility = vertexVisibility;
     this.state.graph.edgeVisibility = edgeVisibility;
     this.activeHighlight = item;
+    this.markLabelsDirty(true);
     this.updateAnalysisSelectionState();
     this.showStatus(item.label);
   }
@@ -1233,10 +1253,12 @@ export class GraphExplorerView extends ItemView {
 
       if (option.type === 'shape' && option.objectName) {
         this.activeObject = getObjectByName(option.objectName);
+        this.lastLocalRootPath = null;
       } else if (option.type === 'graph') {
         let graphData: GraphDataPayload;
         if (option.id === 'narrative') {
           graphData = getNarrativeGraphSample();
+          this.lastLocalRootPath = null;
         } else if (option.vaultOptions) {
           const opts: VaultGraphOptions = {
             ...option.vaultOptions,
@@ -1244,12 +1266,14 @@ export class GraphExplorerView extends ItemView {
             showOnlyExistingFiles: this.settings.showOnlyExistingFiles,
             colorRules: this.settings.colorRules,
           };
+          this.lastLocalRootPath = opts.scope === 'local' ? (opts.rootFile?.path ?? null) : null;
           if (opts.scope === 'local' && !opts.rootFile) {
             new Notice('Open a note to seed the local vault graph.');
           }
           graphData = await buildVaultGraph(this.app, opts);
         } else {
           graphData = { nodes: [], links: [], summary: '', query: '' };
+          this.lastLocalRootPath = null;
         }
         this.activeObject = replaceNarrativeGraph(graphData, { graphName: option.label });
       }
@@ -1258,6 +1282,7 @@ export class GraphExplorerView extends ItemView {
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
       this.recomputeAnalysis();
       this.labelElements.forEach((el) => { el.style.display = 'none'; });
+      this.markLabelsDirty(true);
       this.showStatus(`${option.label}`);
       this.applyPendingFocus(true);
     } catch (error) {
@@ -1270,7 +1295,18 @@ export class GraphExplorerView extends ItemView {
   async handleActiveFileChange(file: TFile | null): Promise<void> {
     this.pendingFocusPath = file?.path ?? null;
     if (this.selectedDataset === 'vault-local') {
-      await this.loadSelectedDataset(true);
+      const nextRootPath = file?.path ?? null;
+      if (nextRootPath === this.lastLocalRootPath && this.activeObject?.meta?.type === 'graph') {
+        this.applyPendingFocus(true);
+        return;
+      }
+      if (this.localDatasetReloadDebounce !== null) {
+        window.clearTimeout(this.localDatasetReloadDebounce);
+      }
+      this.localDatasetReloadDebounce = window.setTimeout(() => {
+        this.localDatasetReloadDebounce = null;
+        void this.loadSelectedDataset(true);
+      }, 220);
       return;
     }
     this.applyPendingFocus(true);
@@ -1318,7 +1354,7 @@ export class GraphExplorerView extends ItemView {
     }
 
     if (this.lastGraphPayload) {
-      this.renderLabels(this.lastGraphPayload);
+      this.markLabelsDirty(true);
     }
   }
 
@@ -1333,7 +1369,6 @@ export class GraphExplorerView extends ItemView {
   private animateFrame() {
     if (!this.activeObject) return;
 
-    // Animate camera transitions
     // Animate camera transitions
     if (this.cameraAnimationProgress < 1) {
       this.cameraAnimationProgress = Math.min(1, this.cameraAnimationProgress + (16 / this.cameraAnimationDuration));
@@ -1420,7 +1455,7 @@ export class GraphExplorerView extends ItemView {
       }
     }
 
-    const theme = getTheme(this.state.themeId);
+    const theme = getTheme(this.settings.theme);
     const baseFocusColor = theme.pointColor({ normW: 0.2, depth: 0 });
     const focusColor: [number, number, number] = [
       Math.min(1, baseFocusColor[0] * 0.35 + 0.65),
@@ -1451,6 +1486,7 @@ export class GraphExplorerView extends ItemView {
       theme,
       graphState: this.activeObject.meta?.type === 'graph' ? this.state.graph : null,
     });
+    this.flushLabelsIfDue();
 
     if (this.activeObject.meta?.type !== 'graph') {
       this.nodeInfoEl.empty();
@@ -1465,7 +1501,28 @@ export class GraphExplorerView extends ItemView {
     if (this.selectedNodeIndex !== null) {
       this.updateNodeDetails(this.selectedNodeIndex);
     }
-    this.renderLabels(payload);
+    this.markLabelsDirty();
+  }
+
+  private markLabelsDirty(force = false): void {
+    this.labelsDirty = true;
+    if (force) {
+      this.lastLabelRenderAt = 0;
+    }
+  }
+
+  private flushLabelsIfDue(): void {
+    if (!this.labelsDirty || !this.lastGraphPayload) {
+      return;
+    }
+    const now = performance.now();
+    const LABEL_RENDER_INTERVAL_MS = 75;
+    if (now - this.lastLabelRenderAt < LABEL_RENDER_INTERVAL_MS) {
+      return;
+    }
+    this.renderLabels(this.lastGraphPayload);
+    this.lastLabelRenderAt = now;
+    this.labelsDirty = false;
   }
 
   private handleCanvasClick(event: MouseEvent) {

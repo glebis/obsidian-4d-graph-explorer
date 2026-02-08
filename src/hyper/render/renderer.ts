@@ -306,7 +306,7 @@ export class HyperRenderer {
           uniforms.opacity.value = 0.75;
         }
         if ('glow' in uniforms) {
-          uniforms.glow.value = graphState?.glowStrength ?? 0.35;
+          uniforms.glow.value = graphState?.glow ?? graphState?.glowStrength ?? 0.35;
         }
       }
     }

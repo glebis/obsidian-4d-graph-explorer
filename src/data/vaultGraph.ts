@@ -2,6 +2,11 @@ import type { App, CachedMetadata } from 'obsidian';
 import { TFile } from 'obsidian';
 import type { GraphDataPayload, RawGraphLink, RawGraphNode } from '../hyper/core/graph';
 import type { ColorRule } from '../main';
+import {
+  collectMissingTargetPaths,
+  compileIgnorePattern,
+  getCustomColorForFile,
+} from './vaultGraphRules';
 
 export type VaultGraphScope = 'global' | 'local';
 
@@ -32,20 +37,10 @@ function isFileExcluded(app: App, file: TFile): boolean {
 
   // Check if file path matches any exclusion pattern
   for (const pattern of userIgnoreFilters) {
-    // Convert glob-like pattern to regex
-    // Simple implementation: * becomes .*, ** becomes .*
-    const regexPattern = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*\*/g, '.*')
-      .replace(/\*/g, '[^/]*');
-
-    try {
-      const regex = new RegExp(`^${regexPattern}$`);
-      if (regex.test(file.path)) {
-        return true;
-      }
-    } catch (error) {
-      console.warn('[vaultGraph] Invalid exclusion pattern:', pattern, error);
+    const regex = compileIgnorePattern(pattern);
+    if (!regex) continue;
+    if (regex.test(file.path)) {
+      return true;
     }
   }
 
@@ -195,61 +190,6 @@ function extractTags(cache: CachedMetadata | null): string[] {
   return Array.from(tags);
 }
 
-function matchColorRule(rule: ColorRule, filePath: string, tags: string[], filename: string): boolean {
-  if (!rule.enabled || !rule.pattern) return false;
-
-  try {
-    if (rule.type === 'tag') {
-      const patterns = rule.pattern
-        .split(/[,\s]+/)
-        .map(p => p.trim().toLowerCase())
-        .filter(p => p.length > 0);
-
-      return patterns.some(pattern => tags.some(tag => tag.toLowerCase() === pattern));
-    } else if (rule.type === 'path') {
-      if (rule.pattern.startsWith('/') && rule.pattern.lastIndexOf('/') > 0) {
-        const lastSlash = rule.pattern.lastIndexOf('/');
-        const regexPattern = rule.pattern.slice(1, lastSlash);
-        const flags = rule.pattern.slice(lastSlash + 1);
-        const regex = new RegExp(regexPattern, flags || 'i');
-        return regex.test(filePath);
-      } else {
-        return filePath.toLowerCase().includes(rule.pattern.toLowerCase());
-      }
-    } else if (rule.type === 'filename') {
-      if (rule.pattern.startsWith('/') && rule.pattern.lastIndexOf('/') > 0) {
-        const lastSlash = rule.pattern.lastIndexOf('/');
-        const regexPattern = rule.pattern.slice(1, lastSlash);
-        const flags = rule.pattern.slice(lastSlash + 1);
-        const regex = new RegExp(regexPattern, flags || 'i');
-        return regex.test(filename);
-      } else {
-        return filename.toLowerCase().includes(rule.pattern.toLowerCase());
-      }
-    }
-  } catch (error) {
-    console.warn('[vaultGraph] Invalid color rule pattern:', rule, error);
-    return false;
-  }
-
-  return false;
-}
-
-function getCustomColorForFile(filePath: string, tags: string[], colorRules: ColorRule[]): number | null {
-  const filename = filePath.split('/').pop() ?? '';
-
-  for (const rule of colorRules) {
-    if (matchColorRule(rule, filePath, tags, filename)) {
-      // Convert hex color to integer
-      const hex = rule.color.replace('#', '');
-      const colorInt = parseInt(hex, 16);
-      return colorInt;
-    }
-  }
-
-  return null;
-}
-
 function gatherGlobalFiles(app: App, includeCanvas: boolean, maxNodes: number): TFile[] {
   const markdown = app.vault.getMarkdownFiles();
   const canvases = includeCanvas
@@ -348,38 +288,69 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   const nodes: RawGraphNode[] = [];
   const nodeIdByPath = new Map<string, string>();
   const colorRules = options.colorRules ?? [];
+  const includedPaths = new Set(filtered.map((file) => file.path));
 
-  for (const file of filtered) {
-    const cache = app.metadataCache.getFileCache(file) ?? null;
-    const summary = await extractNoteSummary(app, file, cache);
-    const { image, gallery } = gatherNodeMedia(app, file, cache);
-    const importance = scoreNodeImportance(file.path, degreeMaps);
-    const tags = extractTags(cache);
-    const isMoc = tags.includes('moc');
-    const nodeId = file.path;
+  const missingNodePaths = showOnlyExistingFiles
+    ? []
+    : collectMissingTargetPaths({
+      includeCanvas,
+      maxCount: Math.max(0, maxNodes - filtered.length),
+      sourcePaths: filtered.map((file) => file.path),
+      resolvedLinks,
+      knownPaths: includedPaths,
+      hasPath: (path) => {
+        const entry = app.vault.getAbstractFileByPath(path);
+        return entry instanceof TFile;
+      },
+    });
 
-    nodeIdByPath.set(file.path, nodeId);
+  const existingNodeData = await Promise.all(
+    filtered.map(async (file) => {
+      const cache = app.metadataCache.getFileCache(file) ?? null;
+      const summary = await extractNoteSummary(app, file, cache);
+      const { image, gallery } = gatherNodeMedia(app, file, cache);
+      const importance = scoreNodeImportance(file.path, degreeMaps);
+      const tags = extractTags(cache);
+      const isMoc = tags.includes('moc');
+      const nodeId = file.path;
 
-    // Apply custom color if matching rule exists
-    const customColor = getCustomColorForFile(file.path, tags, colorRules);
-    const nodeData: RawGraphNode = {
-      id: nodeId,
-      label: file.basename,
-      category: getCategoryForFile(file),
-      summary,
-      importance,
-      size: importance * 2.5,
-      imageUrl: image,
-      media: gallery,
-      raw: { isMoc, tags },
-    };
+      const customColor = getCustomColorForFile(file.path, tags, colorRules);
+      const nodeData: RawGraphNode = {
+        id: nodeId,
+        label: file.basename,
+        category: getCategoryForFile(file),
+        summary,
+        importance,
+        size: importance * 2.5,
+        imageUrl: image,
+        media: gallery,
+        raw: { isMoc, tags },
+      };
+      if (customColor !== null) {
+        nodeData.color = customColor;
+      }
+      return { path: file.path, nodeData };
+    })
+  );
 
-    if (customColor !== null) {
-      nodeData.color = customColor;
-    }
-
+  existingNodeData.forEach(({ path, nodeData }) => {
+    nodeIdByPath.set(path, String(nodeData.id ?? path));
     nodes.push(nodeData);
-  }
+  });
+
+  missingNodePaths.forEach((missingPath) => {
+    const nodeId = missingPath;
+    nodeIdByPath.set(missingPath, nodeId);
+    nodes.push({
+      id: nodeId,
+      label: missingPath.split('/').pop() ?? missingPath,
+      category: 'missing',
+      summary: 'Missing file reference',
+      importance: 1,
+      size: 2.5,
+      raw: { isMissing: true, tags: [] },
+    });
+  });
 
   const links: RawGraphLink[] = [];
 
