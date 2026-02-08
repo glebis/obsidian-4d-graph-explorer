@@ -9,6 +9,7 @@ import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
 import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
 import { pickVisibleLabels, pushCandidateToPool, type LabelCandidate } from './labelSelection';
+import { getLabelPerformanceProfile } from './labelPerformanceProfile';
 import { visualSettingRefreshOptions, type VisualSettingAction } from '../settings/visualSettingPolicy';
 import type GraphExplorerPlugin from '../main';
 import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
@@ -1656,9 +1657,8 @@ export class GraphExplorerView extends ItemView {
       return;
     }
     const now = performance.now();
-    const labelCount = this.lastGraphPayload.labels.length;
-    const LABEL_RENDER_INTERVAL_MS = labelCount > 4000 ? 180 : (labelCount > 2000 ? 140 : 75);
-    if (now - this.lastLabelRenderAt < LABEL_RENDER_INTERVAL_MS) {
+    const profile = getLabelPerformanceProfile(this.lastGraphPayload.labels.length);
+    if (now - this.lastLabelRenderAt < profile.renderIntervalMs) {
       return;
     }
     this.renderLabels(this.lastGraphPayload);
@@ -1814,10 +1814,11 @@ export class GraphExplorerView extends ItemView {
 
     const { positions, labels, vertexVisibility } = payload;
     const focusIndex = this.selectedNodeIndex ?? -1;
-    const MAX_VISIBLE_LABELS = 24;
-    const MAX_CANDIDATE_POOL = 160;
-    const MIN_VISIBILITY = 0.15;
-    const MIN_OPACITY = 0.25;
+    const profile = getLabelPerformanceProfile(labels.length);
+    const MAX_VISIBLE_LABELS = profile.maxVisibleLabels;
+    const MAX_CANDIDATE_POOL = profile.maxCandidatePool;
+    const MIN_VISIBILITY = profile.minVisibility;
+    const MIN_OPACITY = profile.minOpacity;
 
     while (this.labelElements.length < labels.length) {
       const el = document.createElement('div');

@@ -6,6 +6,7 @@ import {
   clamp,
 } from '../core/math4d';
 import { blendGraphChannel } from './colorThemeMath';
+import { getGraphLabelDispatchIntervalMs } from './graphLabelDispatch';
 
 const tempColor = new THREE.Color();
 const tempVec = new THREE.Vector3();
@@ -65,6 +66,10 @@ export class HyperRenderer {
     this.graphMeta = null;
     this.graphLabelCallback = null;
     this.graphLabelPayload = null;
+    this.lastGraphLabelPushAt = 0;
+    this.lastGraphLabelFocusNode = null;
+    this.lastGraphVertexVisibilityRef = null;
+    this.lastGraphEdgeVisibilityRef = null;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambient);
@@ -111,6 +116,10 @@ export class HyperRenderer {
     this.isGraph = !!(object?.meta && object.meta.type === 'graph');
     this.graphMeta = this.isGraph ? object.meta : null;
     this.vertexCache3 = new Array(object.vertices.length).fill(null);
+    this.lastGraphLabelPushAt = 0;
+    this.lastGraphLabelFocusNode = null;
+    this.lastGraphVertexVisibilityRef = null;
+    this.lastGraphEdgeVisibilityRef = null;
     this._buildGeometry();
   }
 
@@ -465,10 +474,29 @@ export class HyperRenderer {
         graphState,
       };
       if (this.graphLabelCallback) {
-        this.graphLabelCallback(this.graphLabelPayload);
+        const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now()
+          : Date.now();
+        const focusNode = graphState?.focusNode ?? null;
+        const focusChanged = focusNode !== this.lastGraphLabelFocusNode;
+        const vertexVisibilityChanged = vertexVisibility !== this.lastGraphVertexVisibilityRef;
+        const edgeVisibilityChanged = edgeVisibility !== this.lastGraphEdgeVisibilityRef;
+        const intervalMs = getGraphLabelDispatchIntervalMs(graphMeta.nodes.length);
+        const elapsed = now - this.lastGraphLabelPushAt;
+        if (focusChanged || vertexVisibilityChanged || edgeVisibilityChanged || elapsed >= intervalMs) {
+          this.graphLabelCallback(this.graphLabelPayload);
+          this.lastGraphLabelPushAt = now;
+          this.lastGraphLabelFocusNode = focusNode;
+          this.lastGraphVertexVisibilityRef = vertexVisibility;
+          this.lastGraphEdgeVisibilityRef = edgeVisibility;
+        }
       }
     } else {
       this.graphLabelPayload = null;
+      this.lastGraphLabelPushAt = 0;
+      this.lastGraphLabelFocusNode = null;
+      this.lastGraphVertexVisibilityRef = null;
+      this.lastGraphEdgeVisibilityRef = null;
     }
 
     const shouldRenderEdges = showLines || useSlice || useShadow;
