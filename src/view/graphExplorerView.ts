@@ -8,6 +8,7 @@ import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
 import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
+import { pickVisibleLabels, pushCandidateToPool, type LabelCandidate } from './labelSelection';
 import type GraphExplorerPlugin from '../main';
 import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
 
@@ -165,12 +166,14 @@ export class GraphExplorerView extends ItemView {
   private overlayEl!: HTMLDivElement;
   private labelLayer!: HTMLDivElement;
   private labelElements: HTMLDivElement[] = [];
+  private visibleLabelIndexes: number[] = [];
   private toolbarEl!: HTMLDivElement;
   private statusEl!: HTMLSpanElement;
   private configPanelEl!: HTMLDivElement;
   private configVisible = false;
   private datasetSelectEl!: HTMLSelectElement;
   private themeSelectEl!: HTMLSelectElement;
+  private fontSelectEl!: HTMLSelectElement;
   private cameraPresetSelectEl!: HTMLSelectElement;
   private zoomSliderEl!: HTMLInputElement;
   private zoomValueEl!: HTMLSpanElement;
@@ -276,7 +279,11 @@ export class GraphExplorerView extends ItemView {
     if (this.themeSelectEl) {
       this.themeSelectEl.value = settings.theme;
     }
+    if (this.fontSelectEl) {
+      this.fontSelectEl.value = settings.labelFont;
+    }
     this.updateTheme();
+    this.applyLabelFont();
   }
 
   private updateTheme() {
@@ -320,6 +327,30 @@ export class GraphExplorerView extends ItemView {
     style.setProperty('--hyper-color-rule-bg', ui.colorRuleBackground);
     style.setProperty('--hyper-color-rule-border', ui.colorRuleBorder);
     style.setProperty('--hyper-scrollbar-thumb', ui.scrollbarThumb);
+  }
+
+  private static readonly FONT_STACKS: Record<string, string> = {
+    'default': '',
+    'inter': '"Inter", "Inter Variable", system-ui, sans-serif',
+    'dm-sans': '"DM Sans", "DM Sans Variable", system-ui, sans-serif',
+    'space-grotesk': '"Space Grotesk", "Space Grotesk Variable", system-ui, sans-serif',
+    'ibm-plex-sans': '"IBM Plex Sans", system-ui, sans-serif',
+    'source-serif-4': '"Source Serif 4", "Source Serif 4 Variable", "Georgia", serif',
+    'literata': '"Literata", "Literata Variable", "Georgia", serif',
+    'fraunces': '"Fraunces", "Fraunces Variable", "Georgia", serif',
+    'jetbrains-mono': '"JetBrains Mono", "JetBrains Mono Variable", monospace',
+    'ibm-plex-mono': '"IBM Plex Mono", monospace',
+    'space-mono': '"Space Mono", monospace',
+  };
+
+  private applyLabelFont(): void {
+    if (!this.rootEl) return;
+    const stack = GraphExplorerView.FONT_STACKS[this.settings.labelFont] ?? '';
+    if (stack) {
+      this.rootEl.style.setProperty('--hyper-label-font', stack);
+    } else {
+      this.rootEl.style.removeProperty('--hyper-label-font');
+    }
   }
 
   getViewType(): string {
@@ -406,6 +437,7 @@ export class GraphExplorerView extends ItemView {
 
     this.renderer = new HyperRenderer(this.canvasEl);
     this.updateTheme();
+    this.applyLabelFont();
     this.applyCameraPreset(this.state.camera.preset);
     this.renderer.setGraphLabelCallback((payload: GraphLabelPayload) => this.onGraphPayload(payload));
 
@@ -511,6 +543,31 @@ export class GraphExplorerView extends ItemView {
       this.settings.theme = this.themeSelectEl.value;
       this.state.themeId = this.themeSelectEl.value;
       this.updateTheme();
+      void this.plugin.handleVisualSettingChange();
+    });
+
+    const fontRow = body.createDiv({ cls: 'hyper-config-row' });
+    const fontId = `hyper-font-${uniqueSuffix}`;
+    fontRow.createEl('label', { text: 'Label font', attr: { for: fontId } });
+    this.fontSelectEl = fontRow.createEl('select', { attr: { id: fontId } });
+    const FONT_OPTIONS: Array<{ id: string; label: string }> = [
+      { id: 'default', label: 'Default (Obsidian)' },
+      { id: 'inter', label: 'Inter' },
+      { id: 'dm-sans', label: 'DM Sans' },
+      { id: 'space-grotesk', label: 'Space Grotesk' },
+      { id: 'ibm-plex-sans', label: 'IBM Plex Sans' },
+      { id: 'source-serif-4', label: 'Source Serif 4' },
+      { id: 'literata', label: 'Literata' },
+      { id: 'fraunces', label: 'Fraunces' },
+      { id: 'jetbrains-mono', label: 'JetBrains Mono' },
+      { id: 'ibm-plex-mono', label: 'IBM Plex Mono' },
+      { id: 'space-mono', label: 'Space Mono' },
+    ];
+    FONT_OPTIONS.forEach((opt) => createOption(this.fontSelectEl, opt));
+    this.fontSelectEl.value = this.settings.labelFont;
+    this.fontSelectEl.addEventListener('change', () => {
+      this.settings.labelFont = this.fontSelectEl.value;
+      this.applyLabelFont();
       void this.plugin.handleVisualSettingChange();
     });
 
@@ -1317,7 +1374,7 @@ export class GraphExplorerView extends ItemView {
       this.renderer.setObject(this.activeObject);
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
       this.recomputeAnalysis();
-      this.labelElements.forEach((el) => { el.style.display = 'none'; });
+      this.hideVisibleLabels();
       this.markLabelsDirty(true);
       this.showStatus(`${option.label}`);
       this.applyPendingFocus(true);
@@ -1552,7 +1609,8 @@ export class GraphExplorerView extends ItemView {
       return;
     }
     const now = performance.now();
-    const LABEL_RENDER_INTERVAL_MS = 75;
+    const labelCount = this.lastGraphPayload.labels.length;
+    const LABEL_RENDER_INTERVAL_MS = labelCount > 4000 ? 180 : (labelCount > 2000 ? 140 : 75);
     if (now - this.lastLabelRenderAt < LABEL_RENDER_INTERVAL_MS) {
       return;
     }
@@ -1656,11 +1714,24 @@ export class GraphExplorerView extends ItemView {
     this.updateNodeInfoVisibility();
   }
 
+  private hideVisibleLabels() {
+    if (this.visibleLabelIndexes.length === 0) {
+      return;
+    }
+    for (const index of this.visibleLabelIndexes) {
+      const el = this.labelElements[index];
+      if (el) {
+        el.style.display = 'none';
+      }
+    }
+    this.visibleLabelIndexes = [];
+  }
+
   private renderLabels(payload: GraphLabelPayload) {
     if (!this.labelLayer) return;
     const isGraph = this.activeObject.meta?.type === 'graph';
     if (!isGraph) {
-      this.labelElements.forEach((el) => { el.style.display = 'none'; });
+      this.hideVisibleLabels();
       return;
     }
     const camera = (this.renderer as any).camera;
@@ -1673,29 +1744,15 @@ export class GraphExplorerView extends ItemView {
     const { positions, labels, vertexVisibility } = payload;
     const focusIndex = this.selectedNodeIndex ?? -1;
     const MAX_VISIBLE_LABELS = 24;
+    const MAX_CANDIDATE_POOL = 160;
     const MIN_VISIBILITY = 0.15;
     const MIN_OPACITY = 0.25;
-
-    type LabelCandidate = {
-      index: number;
-      text: string;
-      x: number;
-      y: number;
-      opacity: number;
-      weight: number;
-      fontSize: number;
-      focus: boolean;
-    };
 
     while (this.labelElements.length < labels.length) {
       const el = document.createElement('div');
       el.className = 'hyper-label';
       this.labelLayer.appendChild(el);
       this.labelElements.push(el);
-    }
-
-    for (let i = 0; i < this.labelElements.length; i += 1) {
-      this.labelElements[i].style.display = 'none';
     }
 
     const candidates: LabelCandidate[] = [];
@@ -1730,7 +1787,7 @@ export class GraphExplorerView extends ItemView {
       const rawLabel = node.label.replace(/^\d{8}-/, '');
       const text = node.emoji ? `${node.emoji} ${rawLabel}` : rawLabel;
 
-      candidates.push({
+      pushCandidateToPool(candidates, {
         index: i,
         text,
         x,
@@ -1739,43 +1796,16 @@ export class GraphExplorerView extends ItemView {
         weight,
         fontSize,
         focus: focusIndex === i,
-      });
+      }, MAX_CANDIDATE_POOL);
     }
+
+    this.hideVisibleLabels();
 
     if (candidates.length === 0) {
       return;
     }
 
-    const focusCandidate = candidates.find((candidate) => candidate.focus) ?? null;
-    const sorted = [...candidates].sort((a, b) => b.weight - a.weight);
-    const visible: LabelCandidate[] = [];
-
-    if (focusCandidate) {
-      visible.push({ ...focusCandidate, weight: Math.max(focusCandidate.weight, 1.2) });
-    }
-
-    for (const candidate of sorted) {
-      if (visible.some((existing) => existing.index === candidate.index)) {
-        continue;
-      }
-      let overlaps = false;
-      for (const existing of visible) {
-        const dx = Math.abs(candidate.x - existing.x);
-        const dy = Math.abs(candidate.y - existing.y);
-        const avgFontSize = (candidate.fontSize + existing.fontSize) * 0.5;
-        const hThreshold = Math.max(40, (candidate.text.length + existing.text.length) * 0.5 * avgFontSize * 0.38);
-        const vThreshold = Math.max(18, avgFontSize * 1.1);
-        if (dx < hThreshold && dy < vThreshold) {
-          overlaps = true;
-          break;
-        }
-      }
-      if (overlaps) continue;
-      visible.push(candidate);
-      if (visible.length >= MAX_VISIBLE_LABELS) {
-        break;
-      }
-    }
+    const visible = pickVisibleLabels(candidates, MAX_VISIBLE_LABELS);
 
     for (const candidate of visible) {
       const el = this.labelElements[candidate.index];
@@ -1788,6 +1818,7 @@ export class GraphExplorerView extends ItemView {
       el.style.zIndex = String(400 + Math.round(candidate.weight * 220));
       el.style.display = 'block';
       el.classList.toggle('hyper-label-focus', candidate.focus);
+      this.visibleLabelIndexes.push(candidate.index);
     }
   }
 
