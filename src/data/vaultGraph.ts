@@ -8,6 +8,7 @@ import {
   getCustomColorForFile,
 } from './vaultGraphRules';
 import { type DegreeMaps, resolvedLinkDerivedCache } from './linkMaps';
+import { selectLocalScopePaths } from './localScopeSelection';
 
 export type VaultGraphScope = 'global' | 'local';
 
@@ -180,7 +181,12 @@ function gatherGlobalFiles(app: App, includeCanvas: boolean, maxNodes: number): 
   return combined.slice(0, maxNodes);
 }
 
+function gatherRecentPaths(app: App, includeCanvas: boolean, maxNodes: number): string[] {
+  return gatherGlobalFiles(app, includeCanvas, maxNodes).map((file) => file.path);
+}
+
 function pickFilesForLocalScope(
+  app: App,
   options: VaultGraphOptions,
   resolvedLinks: Record<string, Record<string, number>>,
   reverseLinks: Map<string, Set<string>>
@@ -188,41 +194,19 @@ function pickFilesForLocalScope(
   const root = options.rootFile;
   const includeCanvas = options.includeCanvas ?? true;
   const depthLimit = options.depth ?? 2;
+  const maxNodes = options.maxNodes ?? 360;
+  const minNodes = Math.max(8, Math.min(maxNodes, 48));
 
-  const result = new Set<string>();
-  if (!root) return result;
-
-  const queue: Array<{ path: string; depth: number }> = [{ path: root.path, depth: 0 }];
-  result.add(root.path);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current.depth >= depthLimit) continue;
-
-    const outgoing = resolvedLinks[current.path];
-    if (outgoing) {
-      Object.keys(outgoing).forEach((target) => {
-        if (!includeCanvas && !target.toLowerCase().endsWith('.md')) return;
-        if (!result.has(target)) {
-          result.add(target);
-          queue.push({ path: target, depth: current.depth + 1 });
-        }
-      });
-    }
-
-    const incoming = reverseLinks.get(current.path);
-    if (incoming) {
-      incoming.forEach((source) => {
-        if (!includeCanvas && !source.toLowerCase().endsWith('.md')) return;
-        if (!result.has(source)) {
-          result.add(source);
-          queue.push({ path: source, depth: current.depth + 1 });
-        }
-      });
-    }
-  }
-
-  return result;
+  return selectLocalScopePaths({
+    rootPath: root?.path ?? null,
+    depth: depthLimit,
+    minNodes,
+    maxDepth: Math.max(depthLimit, 4),
+    includeCanvas,
+    fallbackPaths: gatherRecentPaths(app, includeCanvas, maxNodes),
+    resolvedLinks,
+    reverseLinks,
+  });
 }
 
 function materializePaths(app: App, paths: Set<string>): TFile[] {
@@ -251,7 +235,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
   if (options.scope === 'global') {
     targetFiles = gatherGlobalFiles(app, includeCanvas, maxNodes);
   } else {
-    const paths = pickFilesForLocalScope(options, resolvedLinks, reverseLinks);
+    const paths = pickFilesForLocalScope(app, options, resolvedLinks, reverseLinks);
     targetFiles = materializePaths(app, paths).slice(0, maxNodes);
   }
 

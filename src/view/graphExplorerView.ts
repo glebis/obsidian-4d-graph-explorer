@@ -1358,15 +1358,18 @@ export class GraphExplorerView extends ItemView {
           graphData = getNarrativeGraphSample();
           this.lastLocalRootPath = null;
         } else if (option.vaultOptions) {
+          const localRoot = option.vaultOptions.scope === 'local'
+            ? this.resolveLocalRootFile()
+            : undefined;
           const opts: VaultGraphOptions = {
             ...option.vaultOptions,
-            rootFile: option.vaultOptions.scope === 'local' ? this.app.workspace.getActiveFile() : undefined,
+            rootFile: localRoot,
             showOnlyExistingFiles: this.settings.showOnlyExistingFiles,
             colorRules: this.settings.colorRules,
           };
           this.lastLocalRootPath = opts.scope === 'local' ? (opts.rootFile?.path ?? null) : null;
           if (opts.scope === 'local' && !opts.rootFile) {
-            new Notice('Open a note to seed the local vault graph.');
+            new Notice('No active note found. Loading local graph from recent vault notes.');
           }
           graphData = await buildVaultGraph(this.app, opts);
         } else {
@@ -1430,6 +1433,26 @@ export class GraphExplorerView extends ItemView {
     } else if (force) {
       this.selectNode(null, { resetFocus: true });
     }
+  }
+
+  private resolveLocalRootFile(): TFile | null {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (activeFile) {
+      return activeFile;
+    }
+    if (this.pendingFocusPath) {
+      const pending = this.app.vault.getAbstractFileByPath(this.pendingFocusPath);
+      if (pending instanceof TFile) {
+        return pending;
+      }
+    }
+    const markdown = this.app.vault.getMarkdownFiles();
+    if (markdown.length === 0) {
+      return null;
+    }
+    return markdown
+      .slice()
+      .sort((a, b) => b.stat.mtime - a.stat.mtime)[0] ?? null;
   }
 
   private selectNode(index: number | null, options: { resetFocus?: boolean; updateDetails?: boolean } = {}) {
