@@ -1,23 +1,37 @@
 /* Core layout for the 4D graph view */
 .hyper-view-container {
   --hyper-background: radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%);
+  --hyper-color-scheme: dark;
+  --hyper-surface-shadow: 0 14px 32px rgba(5, 12, 26, 0.55);
+  --hyper-deep-shadow: 0 20px 44px rgba(5, 12, 26, 0.65);
+  --hyper-inset-shadow: inset 0 0 12px rgba(8, 14, 28, 0.6);
+  --hyper-divider: rgba(120, 170, 240, 0.18);
+  --hyper-input-accent: rgba(120, 180, 255, 0.95);
+  --hyper-checkbox-accent: rgba(120, 180, 255, 0.95);
   --hyper-overlay-text: rgba(235, 244, 255, 0.92);
   --hyper-label-bg: linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55));
   --hyper-label-border: rgba(120, 180, 255, 0.35);
   --hyper-label-text: rgba(240, 248, 255, 0.96);
+  --hyper-label-shadow: 0 10px 26px rgba(4, 8, 20, 0.55);
+  --hyper-label-text-shadow: 0 3px 12px rgba(6, 12, 32, 0.85);
   --hyper-label-focus-bg: linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68));
   --hyper-label-focus-border: rgba(140, 210, 255, 0.55);
   --hyper-label-focus-text: rgba(250, 253, 255, 0.98);
+  --hyper-label-focus-shadow: 0 16px 32px rgba(20, 60, 150, 0.48);
+  --hyper-label-focus-text-shadow: 0 4px 14px rgba(20, 70, 180, 0.68);
   --hyper-toolbar-bg: rgba(10, 18, 36, 0.85);
   --hyper-toolbar-border: rgba(140, 190, 255, 0.35);
   --hyper-toolbar-text: rgba(230, 240, 255, 0.92);
   --hyper-control-bg: rgba(28, 46, 80, 0.92);
   --hyper-control-border: rgba(160, 208, 255, 0.55);
   --hyper-control-text: rgba(235, 244, 255, 0.96);
+  --hyper-control-shadow: 0 6px 14px rgba(12, 24, 48, 0.32);
   --hyper-control-hover-bg: rgba(70, 140, 220, 0.95);
   --hyper-control-hover-shadow: 0 8px 18px rgba(10, 32, 68, 0.45);
   --hyper-image-strip-bg: rgba(12, 22, 40, 0.88);
   --hyper-image-strip-border: rgba(140, 190, 255, 0.28);
+  --hyper-image-border: 1px solid rgba(160, 208, 255, 0.5);
+  --hyper-image-shadow: 0 6px 18px rgba(10, 20, 44, 0.55);
   --hyper-panel-bg: rgba(10, 18, 36, 0.95);
   --hyper-panel-border: rgba(140, 190, 255, 0.38);
   --hyper-panel-text: rgba(220, 232, 255, 0.94);
@@ -38,7 +52,8 @@
   height: 100%;
   overflow: hidden;
   background: var(--hyper-background);
-  color: var(--text-normal);
+  color: var(--hyper-panel-text);
+  color-scheme: var(--hyper-color-scheme);
 }
 
 .hyper-view-canvas {
@@ -76,9 +91,9 @@
   border-radius: 10px;
   background: var(--hyper-label-bg);
   border: 1px solid var(--hyper-label-border);
-  box-shadow: 0 10px 26px rgba(4, 8, 20, 0.55);
+  box-shadow: var(--hyper-label-shadow);
   color: var(--hyper-label-text);
-  text-shadow: 0 3px 12px rgba(6, 12, 32, 0.85);
+  text-shadow: var(--hyper-label-text-shadow);
   letter-spacing: 0.01em;
   backdrop-filter: blur(6px);
   transition: opacity 0.12s ease, font-size 0.12s ease, transform 0.12s ease;
@@ -89,9 +104,9 @@
   font-weight: 600;
   background: var(--hyper-label-focus-bg);
   border-color: var(--hyper-label-focus-border);
-  box-shadow: 0 16px 32px rgba(20, 60, 150, 0.48);
+  box-shadow: var(--hyper-label-focus-shadow);
   color: var(--hyper-label-focus-text);
-  text-shadow: 0 4px 14px rgba(20, 70, 180, 0.68);
+  text-shadow: var(--hyper-label-focus-text-shadow);
 }
 
 .hyper-toolbar {
@@ -107,7 +122,7 @@
   backdrop-filter: blur(14px);
   background: var(--hyper-toolbar-bg);
   border: 1px solid var(--hyper-toolbar-border);
-  box-shadow: 0 14px 32px rgba(5, 12, 26, 0.55);
+  box-shadow: var(--hyper-surface-shadow);
   pointer-events: auto;
   color: var(--hyper-toolbar-text);
 }
@@ -129,7 +144,7 @@
   color: var(--hyper-control-text);
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 6px 14px rgba(12, 24, 48, 0.32);
+  box-shadow: var(--hyper-control-shadow);
 }
 
 .hyper-icon-button svg {
@@ -168,7 +183,7 @@
   font-size: 12px;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 6px 14px rgba(12, 24, 48, 0.32);
+  box-shadow: var(--hyper-control-shadow);
 }
 
 .hyper-toolbar button:not(.hyper-icon-button):hover,
@@ -208,8 +223,8 @@
   height: 72px;
   object-fit: cover;
   border-radius: 8px;
-  border: 1px solid rgba(160, 208, 255, 0.5);
-  box-shadow: 0 6px 18px rgba(10, 20, 44, 0.55);
+  border: var(--hyper-image-border);
+  box-shadow: var(--hyper-image-shadow);
 }
 
 .hyper-node-info {
@@ -223,7 +238,7 @@
   background: var(--hyper-panel-bg);
   border-radius: 14px;
   border: 1px solid var(--hyper-panel-border);
-  box-shadow: 0 16px 36px rgba(5, 12, 26, 0.55);
+  box-shadow: var(--hyper-deep-shadow);
   pointer-events: auto;
   color: var(--hyper-panel-text);
 }
@@ -254,7 +269,7 @@
   border-radius: 14px;
   background: var(--hyper-panel-bg);
   border: 1px solid var(--hyper-panel-border);
-  box-shadow: 0 18px 38px rgba(5, 12, 26, 0.6);
+  box-shadow: var(--hyper-deep-shadow);
   pointer-events: auto;
   color: var(--hyper-panel-text);
   backdrop-filter: blur(16px);
@@ -310,14 +325,14 @@
   color: var(--hyper-control-text);
   padding: 6px 10px;
   font-size: 12px;
-  box-shadow: inset 0 0 12px rgba(8, 14, 28, 0.6);
+  box-shadow: var(--hyper-inset-shadow);
   outline: none;
 }
 
 .hyper-config-row input[type='range'] {
   padding: 0;
   height: 6px;
-  accent-color: rgba(120, 180, 255, 0.95);
+  accent-color: var(--hyper-input-accent);
 }
 
 .hyper-config-control {
@@ -346,7 +361,7 @@
   border-radius: 18px;
   background: var(--hyper-analysis-bg);
   border: 1px solid var(--hyper-panel-border);
-  box-shadow: 0 20px 44px rgba(5, 12, 26, 0.65);
+  box-shadow: var(--hyper-deep-shadow);
   pointer-events: auto;
   color: var(--hyper-panel-text);
   backdrop-filter: blur(18px);
@@ -471,7 +486,7 @@
   flex-direction: column;
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px solid rgba(120, 170, 240, 0.18);
+  border-top: 1px solid var(--hyper-divider);
 }
 
 .hyper-analysis-group-header h5 {
@@ -524,7 +539,7 @@
   background: var(--hyper-pill-active-bg);
   border-color: var(--hyper-control-border);
   color: var(--hyper-pill-active-text);
-  box-shadow: 0 6px 18px rgba(18, 48, 96, 0.45);
+  box-shadow: var(--hyper-control-hover-shadow);
 }
 
 .hyper-analysis-item-description {
@@ -631,7 +646,7 @@
   color: var(--hyper-control-text);
   padding: 5px 8px;
   font-size: 11px;
-  box-shadow: inset 0 0 8px rgba(8, 14, 28, 0.5);
+  box-shadow: var(--hyper-inset-shadow);
   outline: none;
 }
 
@@ -655,7 +670,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 12px rgba(20, 50, 120, 0.4);
+  box-shadow: var(--hyper-control-shadow);
 }
 
 .hyper-add-rule-btn:hover {
@@ -667,6 +682,6 @@
 .hyper-config-row input[type='checkbox'] {
   width: 16px;
   height: 16px;
-  accent-color: rgba(120, 180, 255, 0.95);
+  accent-color: var(--hyper-checkbox-accent);
   cursor: pointer;
 }

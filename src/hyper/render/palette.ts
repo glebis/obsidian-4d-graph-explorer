@@ -8,23 +8,36 @@ export type ThemeSampler = (input: ThemeSampleInput) => [number, number, number]
 export interface HyperThemeUi {
   mode: 'dark' | 'light';
   background: string;
+  surfaceShadow: string;
+  deepShadow: string;
+  insetShadow: string;
+  divider: string;
+  inputAccent: string;
+  checkboxAccent: string;
   overlayText: string;
   labelBackground: string;
   labelBorder: string;
   labelText: string;
+  labelShadow: string;
+  labelTextShadow: string;
   labelFocusBackground: string;
   labelFocusBorder: string;
   labelFocusText: string;
+  labelFocusShadow: string;
+  labelFocusTextShadow: string;
   toolbarBackground: string;
   toolbarBorder: string;
   toolbarText: string;
   controlBackground: string;
   controlBorder: string;
   controlText: string;
+  controlShadow: string;
   controlHoverBackground: string;
   controlHoverShadow: string;
   imageStripBackground: string;
   imageStripBorder: string;
+  imageBorder: string;
+  imageShadow: string;
   panelBackground: string;
   panelBorder: string;
   panelText: string;
@@ -110,23 +123,36 @@ function withUi(
   const darkBase: HyperThemeUi = {
     mode: 'dark',
     background: 'radial-gradient(circle at 20% 20%, #1a2438 0%, #050810 78%)',
+    surfaceShadow: '0 14px 32px rgba(5, 12, 26, 0.55)',
+    deepShadow: '0 20px 44px rgba(5, 12, 26, 0.65)',
+    insetShadow: 'inset 0 0 12px rgba(8, 14, 28, 0.6)',
+    divider: 'rgba(120, 170, 240, 0.18)',
+    inputAccent: 'rgba(120, 180, 255, 0.95)',
+    checkboxAccent: 'rgba(120, 180, 255, 0.95)',
     overlayText: 'rgba(235, 244, 255, 0.92)',
     labelBackground: 'linear-gradient(135deg, rgba(6, 16, 34, 0.75), rgba(4, 12, 26, 0.55))',
     labelBorder: 'rgba(120, 180, 255, 0.35)',
     labelText: 'rgba(240, 248, 255, 0.96)',
+    labelShadow: '0 10px 26px rgba(4, 8, 20, 0.55)',
+    labelTextShadow: '0 3px 12px rgba(6, 12, 32, 0.85)',
     labelFocusBackground: 'linear-gradient(140deg, rgba(36, 102, 230, 0.88), rgba(18, 48, 140, 0.68))',
     labelFocusBorder: 'rgba(140, 210, 255, 0.55)',
     labelFocusText: 'rgba(250, 253, 255, 0.98)',
+    labelFocusShadow: '0 16px 32px rgba(20, 60, 150, 0.48)',
+    labelFocusTextShadow: '0 4px 14px rgba(20, 70, 180, 0.68)',
     toolbarBackground: 'rgba(10, 18, 36, 0.85)',
     toolbarBorder: 'rgba(140, 190, 255, 0.35)',
     toolbarText: 'rgba(230, 240, 255, 0.92)',
     controlBackground: 'rgba(28, 46, 80, 0.92)',
     controlBorder: 'rgba(160, 208, 255, 0.55)',
     controlText: 'rgba(235, 244, 255, 0.96)',
+    controlShadow: '0 6px 14px rgba(12, 24, 48, 0.32)',
     controlHoverBackground: 'rgba(70, 140, 220, 0.95)',
     controlHoverShadow: '0 8px 18px rgba(10, 32, 68, 0.45)',
     imageStripBackground: 'rgba(12, 22, 40, 0.88)',
     imageStripBorder: 'rgba(140, 190, 255, 0.28)',
+    imageBorder: '1px solid rgba(160, 208, 255, 0.5)',
+    imageShadow: '0 6px 18px rgba(10, 20, 44, 0.55)',
     panelBackground: 'rgba(10, 18, 36, 0.95)',
     panelBorder: 'rgba(140, 190, 255, 0.38)',
     panelText: 'rgba(220, 232, 255, 0.94)',
@@ -147,23 +173,36 @@ function withUi(
   const lightBase: HyperThemeUi = {
     mode: 'light',
     background: 'radial-gradient(circle at 14% 12%, #ffffff 0%, #edf4ff 55%, #d7e4f7 100%)',
+    surfaceShadow: '0 12px 24px rgba(106, 134, 170, 0.24)',
+    deepShadow: '0 18px 36px rgba(98, 128, 166, 0.26)',
+    insetShadow: 'inset 0 0 8px rgba(184, 206, 234, 0.55)',
+    divider: 'rgba(122, 154, 194, 0.34)',
+    inputAccent: 'rgba(84, 140, 216, 0.95)',
+    checkboxAccent: 'rgba(84, 140, 216, 0.95)',
     overlayText: 'rgba(24, 40, 62, 0.92)',
     labelBackground: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 241, 255, 0.8))',
     labelBorder: 'rgba(86, 122, 168, 0.36)',
     labelText: 'rgba(28, 42, 64, 0.95)',
+    labelShadow: '0 10px 20px rgba(132, 162, 200, 0.26)',
+    labelTextShadow: '0 1px 0 rgba(255, 255, 255, 0.55)',
     labelFocusBackground: 'linear-gradient(140deg, rgba(121, 179, 255, 0.92), rgba(84, 144, 236, 0.86))',
     labelFocusBorder: 'rgba(58, 107, 182, 0.65)',
     labelFocusText: 'rgba(250, 253, 255, 0.98)',
+    labelFocusShadow: '0 14px 28px rgba(80, 132, 204, 0.34)',
+    labelFocusTextShadow: '0 1px 0 rgba(30, 62, 108, 0.35)',
     toolbarBackground: 'rgba(250, 252, 255, 0.88)',
     toolbarBorder: 'rgba(94, 129, 173, 0.35)',
     toolbarText: 'rgba(28, 42, 64, 0.92)',
     controlBackground: 'rgba(240, 246, 255, 0.96)',
     controlBorder: 'rgba(104, 138, 182, 0.5)',
     controlText: 'rgba(25, 40, 60, 0.94)',
+    controlShadow: '0 6px 12px rgba(98, 128, 166, 0.26)',
     controlHoverBackground: 'rgba(126, 178, 246, 0.95)',
     controlHoverShadow: '0 8px 18px rgba(72, 120, 188, 0.35)',
     imageStripBackground: 'rgba(247, 252, 255, 0.92)',
     imageStripBorder: 'rgba(106, 140, 184, 0.32)',
+    imageBorder: '1px solid rgba(128, 162, 206, 0.52)',
+    imageShadow: '0 6px 14px rgba(118, 152, 196, 0.32)',
     panelBackground: 'rgba(252, 255, 255, 0.95)',
     panelBorder: 'rgba(104, 138, 182, 0.36)',
     panelText: 'rgba(30, 44, 66, 0.95)',
