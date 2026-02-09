@@ -285,6 +285,17 @@ export class GraphExplorerView extends ItemView {
     if (this.fontSelectEl) {
       this.fontSelectEl.value = settings.labelFont;
     }
+    this.updateRepelForceDisplay();
+    this.updateCenterForceDisplay();
+    this.updateLinkForceDisplay();
+    this.updateLinkDistanceDisplay();
+    this.updateNodeSizeDisplay();
+    if (this.showLinksToggleEl) {
+      this.showLinksToggleEl.checked = settings.showLinks;
+    }
+    if (this.showOnlyExistingFilesToggleEl) {
+      this.showOnlyExistingFilesToggleEl.checked = settings.showOnlyExistingFiles;
+    }
     this.updateTheme();
     this.applyLabelFont();
   }
