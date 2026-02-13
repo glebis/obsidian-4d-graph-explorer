@@ -3,13 +3,14 @@ import { Vector3 } from 'three';
 import { HyperRenderer } from '../hyper/render/renderer';
 import { HyperControls } from '../hyper/controls/controls';
 import { OBJECTS, getObjectByName, getNarrativeGraphObject, getNarrativeGraphSample, replaceNarrativeGraph, type HyperObject } from '../hyper/core/objects';
-import { composeRotation, applyMatrix, type RotationAngles, type Vec4 } from '../hyper/core/math4d';
+import { composeRotation, type RotationAngles, type Vec4 } from '../hyper/core/math4d';
 import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
 import type { GraphDataPayload } from '../hyper/core/graph';
 import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
 import { pickVisibleLabels, pushCandidateToPool, type LabelCandidate } from './labelSelection';
 import { getLabelPerformanceProfile } from './labelPerformanceProfile';
+import { getRenderPerformanceProfile } from './renderPerformanceProfile';
 import { visualSettingRefreshOptions, type VisualSettingAction } from '../settings/visualSettingPolicy';
 import type GraphExplorerPlugin from '../main';
 import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
@@ -242,9 +243,23 @@ export class GraphExplorerView extends ItemView {
   private fullscreenBtn!: HTMLButtonElement;
   private lastLabelRenderAt = 0;
   private labelsDirty = false;
+  private renderRequested = true;
+  private focusLookAtTarget = new Vector3(0, 0, 0);
+  private activeTheme = getTheme('neon');
   private readonly fullscreenChangeHandler = () => {
     this.updateFullscreenButton();
   };
+
+  private syncRendererPerformanceProfile(): void {
+    if (!this.renderer) return;
+    const meta = this.activeObject?.meta;
+    if (!meta || meta.type !== 'graph') {
+      this.renderer.setPerformanceProfile({ maxPixelRatio: 2, edgeStride: 1 });
+      return;
+    }
+    const profile = getRenderPerformanceProfile(meta.nodes.length, meta.links.length);
+    this.renderer.setPerformanceProfile(profile);
+  }
 
   constructor(leaf: WorkspaceLeaf, plugin: GraphExplorerPlugin) {
     super(leaf);
@@ -272,6 +287,8 @@ export class GraphExplorerView extends ItemView {
     };
     this.pendingFocusPath = activeFile?.path ?? null;
     this.activeObject = getNarrativeGraphObject();
+    this.activeTheme = getTheme(this.settings.theme);
+    this.state.graph.focusColor = this.resolveFocusColor(this.activeTheme);
   }
 
   applySettings(settings: GraphExplorerSettings): void {
@@ -302,6 +319,8 @@ export class GraphExplorerView extends ItemView {
 
   private updateTheme() {
     const theme = getTheme(this.settings.theme);
+    this.activeTheme = theme;
+    this.state.graph.focusColor = this.resolveFocusColor(theme);
     if (this.renderer) {
       this.renderer.updateTheme(theme);
     }
@@ -359,6 +378,7 @@ export class GraphExplorerView extends ItemView {
     style.setProperty('--hyper-color-rule-bg', ui.colorRuleBackground);
     style.setProperty('--hyper-color-rule-border', ui.colorRuleBorder);
     style.setProperty('--hyper-scrollbar-thumb', ui.scrollbarThumb);
+    this.requestRender();
   }
 
   private static readonly FONT_STACKS: Record<string, string> = {
@@ -468,6 +488,7 @@ export class GraphExplorerView extends ItemView {
     this.nodeInfoEl.style.display = 'none';
 
     this.renderer = new HyperRenderer(this.canvasEl);
+    this.syncRendererPerformanceProfile();
     this.updateTheme();
     this.applyLabelFont();
     this.applyCameraPreset(this.state.camera.preset);
@@ -490,6 +511,7 @@ export class GraphExplorerView extends ItemView {
         zoom: () => {
           this.updateCameraZoom();
           this.isFocusing = false;
+          this.requestRender();
         },
         onTogglePanels: () => this.toggleUI(),
       },
@@ -512,7 +534,7 @@ export class GraphExplorerView extends ItemView {
     this.canvasEl.addEventListener('dblclick', (event) => this.handleCanvasDoubleClick(event));
 
     await this.loadSelectedDataset(false);
-    this.startAnimationLoop();
+    this.requestRender();
   }
 
   async onClose(): Promise<void> {
@@ -1211,6 +1233,7 @@ export class GraphExplorerView extends ItemView {
       this.state.autoRotate = !this.state.autoRotate;
     }
     this.updateAutoRotateButton();
+    this.requestRender();
   }
 
   private updateAutoRotateButton() {
@@ -1313,6 +1336,7 @@ export class GraphExplorerView extends ItemView {
     camera.zoom = this.state.camera.zoom;
     camera.updateProjectionMatrix();
     this.updateZoomDisplay();
+    this.requestRender();
   }
 
   private updateNodeInfoVisibility() {
@@ -1354,10 +1378,12 @@ export class GraphExplorerView extends ItemView {
     if (options.syncSelector !== false && this.cameraPresetSelectEl) {
       this.cameraPresetSelectEl.value = preset.id;
     }
+    this.requestRender();
   }
 
   private requestRender() {
-    // No-op placeholder: continuous loop handles rendering
+    this.renderRequested = true;
+    this.startAnimationLoop();
   }
 
   private easeOutCubic(t: number): number {
@@ -1411,12 +1437,14 @@ export class GraphExplorerView extends ItemView {
       }
       this.activeHighlight = null;
       this.renderer.setObject(this.activeObject);
+      this.syncRendererPerformanceProfile();
       this.transformedVertices = new Array(this.activeObject.vertices.length).fill(null) as Vec4[];
       this.recomputeAnalysis();
       this.hideVisibleLabels();
       this.markLabelsDirty(true);
       this.showStatus(`${option.label}`);
       this.applyPendingFocus(true);
+      this.requestRender();
     } catch (error) {
       console.error('[4d-graph] Failed to load dataset', error);
       new Notice('Failed to load graph dataset. Check console for details.');
@@ -1508,23 +1536,46 @@ export class GraphExplorerView extends ItemView {
     if (this.lastGraphPayload) {
       this.markLabelsDirty(true);
     }
+    this.requestRender();
   }
 
   private startAnimationLoop() {
+    if (this.animationId !== null) {
+      return;
+    }
     const loop = () => {
-      this.animationId = requestAnimationFrame(loop);
-      this.animateFrame();
+      this.animationId = null;
+      const shouldContinue = this.animateFrame();
+      if (shouldContinue) {
+        this.animationId = requestAnimationFrame(loop);
+      }
     };
-    loop();
+    this.animationId = requestAnimationFrame(loop);
   }
 
-  private animateFrame() {
-    if (!this.activeObject) return;
+  private animateFrame(): boolean {
+    if (!this.activeObject) return false;
+
+    const targetStrength = this.selectedNodeIndex !== null ? 1 : 0;
+    const focusAnimating = Math.abs(targetStrength - this.focusStrength) >= 0.001;
+    const shouldRender = this.renderRequested
+      || this.state.autoRotate
+      || this.animationProgress < 1
+      || this.cameraAnimationProgress < 1
+      || this.state.projection.scaleTarget !== undefined
+      || focusAnimating
+      || this.labelsDirty;
+    if (!shouldRender) {
+      return false;
+    }
+    this.renderRequested = false;
+    let continueRendering = false;
 
     // Animate camera transitions
     if (this.cameraAnimationProgress < 1) {
       this.cameraAnimationProgress = Math.min(1, this.cameraAnimationProgress + (16 / this.cameraAnimationDuration));
       const easeProgress = this.easeOutCubic(this.cameraAnimationProgress);
+      continueRendering = true;
 
       if (this.cameraAnimationStart && this.cameraAnimationTarget) {
         const camera = (this.renderer as any)?.camera;
@@ -1557,12 +1608,18 @@ export class GraphExplorerView extends ItemView {
       // Handle persistent focus or default lookAt
       const camera = (this.renderer as any)?.camera;
       if (camera) {
-        const target = new Vector3(0, 0, 0);
+        this.focusLookAtTarget.set(0, 0, 0);
         if (this.isFocusing && this.selectedNodeIndex !== null && this.transformedVertices[this.selectedNodeIndex]) {
           const v = this.transformedVertices[this.selectedNodeIndex];
-          target.set(v[0], v[1], v[2]);
+          this.focusLookAtTarget.set(v[0], v[1], v[2]);
         }
-        this.currentLookAt.lerp(target, 0.1);
+        const lookAtDelta = this.currentLookAt.distanceToSquared(this.focusLookAtTarget);
+        if (lookAtDelta > 1e-6) {
+          this.currentLookAt.lerp(this.focusLookAtTarget, 0.1);
+          continueRendering = true;
+        } else {
+          this.currentLookAt.copy(this.focusLookAtTarget);
+        }
         camera.lookAt(this.currentLookAt);
       }
     }
@@ -1573,30 +1630,43 @@ export class GraphExplorerView extends ItemView {
       this.state.rotation.xy += 0.12 * speed * delta;
       this.state.rotation.xw += 0.1 * speed * delta;
       this.state.rotation.yz += 0.08 * speed * delta;
+      continueRendering = true;
     }
 
     // Advance node animation progress
     if (this.animationProgress < 1) {
       this.animationProgress = Math.min(1, this.animationProgress + (16 / this.animationDuration));
+      continueRendering = true;
     }
 
     const rotationMatrix = composeRotation(this.state.rotation);
     const easeProgress = this.easeOutCubic(this.animationProgress);
+    const isVertexAnimating = this.animationProgress < 1;
 
     for (let i = 0; i < this.activeObject.vertices.length; i += 1) {
-      const targetVertex = applyMatrix(this.activeObject.vertices[i], rotationMatrix);
+      const source = this.activeObject.vertices[i];
+      const targetX = rotationMatrix[0] * source[0] + rotationMatrix[1] * source[1] + rotationMatrix[2] * source[2] + rotationMatrix[3] * source[3];
+      const targetY = rotationMatrix[4] * source[0] + rotationMatrix[5] * source[1] + rotationMatrix[6] * source[2] + rotationMatrix[7] * source[3];
+      const targetZ = rotationMatrix[8] * source[0] + rotationMatrix[9] * source[1] + rotationMatrix[10] * source[2] + rotationMatrix[11] * source[3];
+      const targetW = rotationMatrix[12] * source[0] + rotationMatrix[13] * source[1] + rotationMatrix[14] * source[2] + rotationMatrix[15] * source[3];
+      let out = this.transformedVertices[i];
+      if (!out) {
+        out = [0, 0, 0, 0];
+        this.transformedVertices[i] = out;
+      }
 
       // Interpolate between previous and current positions during animation
-      if (this.animationProgress < 1 && i < this.previousVertices.length) {
+      if (isVertexAnimating && i < this.previousVertices.length) {
         const prev = this.previousVertices[i];
-        this.transformedVertices[i] = [
-          prev[0] + (targetVertex[0] - prev[0]) * easeProgress,
-          prev[1] + (targetVertex[1] - prev[1]) * easeProgress,
-          prev[2] + (targetVertex[2] - prev[2]) * easeProgress,
-          prev[3] + (targetVertex[3] - prev[3]) * easeProgress,
-        ];
+        out[0] = prev[0] + (targetX - prev[0]) * easeProgress;
+        out[1] = prev[1] + (targetY - prev[1]) * easeProgress;
+        out[2] = prev[2] + (targetZ - prev[2]) * easeProgress;
+        out[3] = prev[3] + (targetW - prev[3]) * easeProgress;
       } else {
-        this.transformedVertices[i] = targetVertex;
+        out[0] = targetX;
+        out[1] = targetY;
+        out[2] = targetZ;
+        out[3] = targetW;
       }
     }
 
@@ -1604,28 +1674,25 @@ export class GraphExplorerView extends ItemView {
       this.state.projection.scale += (this.state.projection.scaleTarget - this.state.projection.scale) * 0.08;
       if (Math.abs(this.state.projection.scaleTarget - this.state.projection.scale) < 0.0001) {
         this.state.projection.scaleTarget = undefined;
+      } else {
+        continueRendering = true;
       }
     }
 
-    const theme = getTheme(this.settings.theme);
-    const baseFocusColor = theme.pointColor({ normW: 0.2, depth: 0 });
-    const focusColor: [number, number, number] = [
-      Math.min(1, baseFocusColor[0] * 0.35 + 0.65),
-      Math.min(1, baseFocusColor[1] * 0.35 + 0.65),
-      Math.min(1, baseFocusColor[2] * 0.35 + 0.65),
-    ];
-    this.state.graph.focusColor = focusColor;
+    const theme = this.activeTheme;
 
     if (this.state.graph.focusNode !== this.selectedNodeIndex) {
       this.state.graph.focusNode = this.selectedNodeIndex;
       this.focusStrength = 0;
+      continueRendering = true;
     }
 
-    const targetStrength = this.selectedNodeIndex !== null ? 1 : 0;
     const approach = this.selectedNodeIndex !== null ? 0.12 : 0.08;
     this.focusStrength += (targetStrength - this.focusStrength) * approach;
     if (Math.abs(targetStrength - this.focusStrength) < 0.001) {
       this.focusStrength = targetStrength;
+    } else {
+      continueRendering = true;
     }
     this.state.graph.focusStrength = this.focusStrength;
 
@@ -1639,6 +1706,9 @@ export class GraphExplorerView extends ItemView {
       graphState: this.activeObject.meta?.type === 'graph' ? this.state.graph : null,
     });
     this.flushLabelsIfDue();
+    if (this.labelsDirty) {
+      continueRendering = true;
+    }
 
     if (this.activeObject.meta?.type !== 'graph') {
       this.nodeInfoEl.empty();
@@ -1646,6 +1716,7 @@ export class GraphExplorerView extends ItemView {
       this.imageStripEl.style.display = 'none';
       this.lastRenderedNodeSignature = null;
     }
+    return continueRendering;
   }
 
   private onGraphPayload(payload: GraphLabelPayload) {
@@ -1661,6 +1732,16 @@ export class GraphExplorerView extends ItemView {
     if (force) {
       this.lastLabelRenderAt = 0;
     }
+    this.requestRender();
+  }
+
+  private resolveFocusColor(theme: ReturnType<typeof getTheme>): [number, number, number] {
+    const baseFocusColor = theme.pointColor({ normW: 0.2, depth: 0 });
+    return [
+      Math.min(1, baseFocusColor[0] * 0.35 + 0.65),
+      Math.min(1, baseFocusColor[1] * 0.35 + 0.65),
+      Math.min(1, baseFocusColor[2] * 0.35 + 0.65),
+    ];
   }
 
   private flushLabelsIfDue(): void {

@@ -54,7 +54,11 @@ export class HyperRenderer {
       antialias: true,
       alpha: true,
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.maxPixelRatio = window.devicePixelRatio || 1;
+    this.currentPixelRatio = 0;
+    this.edgeStride = 1;
+    this.lastClientWidth = 0;
+    this.lastClientHeight = 0;
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
     this.camera.position.set(0, 0, 5);
@@ -78,8 +82,6 @@ export class HyperRenderer {
     keyLight.position.set(2, 3, 4);
     this.scene.add(keyLight);
 
-    this.clock = new THREE.Clock();
-
     this.vertexCache3 = [];
     this.slicePointCount = 0;
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -100,11 +102,50 @@ export class HyperRenderer {
     this.renderer.dispose();
   }
 
-  resize() {
+  _refreshPixelRatio() {
+    const deviceRatio = window.devicePixelRatio || 1;
+    const targetRatio = Math.max(0.5, Math.min(deviceRatio, this.maxPixelRatio || deviceRatio));
+    if (Math.abs(targetRatio - this.currentPixelRatio) > 0.001) {
+      this.currentPixelRatio = targetRatio;
+      this.renderer.setPixelRatio(targetRatio);
+      return true;
+    }
+    return false;
+  }
+
+  setPerformanceProfile(profile = {}) {
+    let shouldResize = false;
+
+    if (Number.isFinite(profile.maxPixelRatio)) {
+      const nextMaxPixelRatio = Math.max(0.5, Number(profile.maxPixelRatio));
+      if (Math.abs(nextMaxPixelRatio - this.maxPixelRatio) > 0.001) {
+        this.maxPixelRatio = nextMaxPixelRatio;
+        shouldResize = true;
+      }
+    }
+
+    if (Number.isFinite(profile.edgeStride)) {
+      this.edgeStride = Math.max(1, Math.floor(Number(profile.edgeStride)));
+    }
+
+    if (shouldResize) {
+      this.resize(true);
+    }
+  }
+
+  resize(force = false) {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
     if (width === 0 || height === 0) return;
-    if (this.canvas.width !== width || this.canvas.height !== height) {
+    const pixelRatioChanged = this._refreshPixelRatio();
+    if (
+      force ||
+      pixelRatioChanged ||
+      width !== this.lastClientWidth ||
+      height !== this.lastClientHeight
+    ) {
+      this.lastClientWidth = width;
+      this.lastClientHeight = height;
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
@@ -300,7 +341,6 @@ export class HyperRenderer {
     if (!this.object) return;
     const isGraph = this.isGraph;
     const graphMeta = this.graphMeta;
-    const time = this.clock.getElapsedTime();
     if (!isGraph) {
       if (!theme) theme = this.theme;
       if (theme && theme !== this.theme) {
@@ -361,10 +401,21 @@ export class HyperRenderer {
     const projected = this.vertexCache3;
     let depthMin = Infinity;
     let depthMax = -Infinity;
+    const wCamera = projection?.wCamera ?? 3.2;
+    const projectionScale = projection?.scale ?? 1.2;
 
     for (let i = 0; i < vertexCount; i += 1) {
-      const vec3 = projectPerspective(vertices4d[i], projection);
-      projected[i] = vec3;
+      const vec4 = vertices4d[i];
+      const denom = Math.max(0.05, wCamera - vec4[3]);
+      const factor = projectionScale / denom;
+      let vec3 = projected[i];
+      if (!vec3) {
+        vec3 = [0, 0, 0];
+        projected[i] = vec3;
+      }
+      vec3[0] = vec4[0] * factor;
+      vec3[1] = vec4[1] * factor;
+      vec3[2] = vec4[2] * factor;
       vertexPositions[i * 3] = vec3[0];
       vertexPositions[i * 3 + 1] = vec3[1];
       vertexPositions[i * 3 + 2] = vec3[2];
@@ -416,12 +467,11 @@ export class HyperRenderer {
 
         if (isFocusNode) {
           const emphasis = clamp(focusStrength, 0, 1);
-          const pulse = 0.6 + 0.4 * Math.sin(time * 1.25);
           finalWeight = Math.max(
             finalWeight,
             visibilityWeight * sliceWeight * (1 + emphasis * 0.8) + emphasis * 0.25,
           );
-          sizeMultiplier = 1 + emphasis * 0.55 + (pulse - 0.6) * 0.3 * emphasis;
+          sizeMultiplier = 1 + emphasis * 0.55;
           if (focusColor) {
             colorR = baseColorR * (1 - emphasis) + focusColor[0] * emphasis;
             colorG = baseColorG * (1 - emphasis) + focusColor[1] * emphasis;
@@ -432,7 +482,7 @@ export class HyperRenderer {
             colorG *= brighten;
             colorB *= brighten;
           }
-          finalWeight *= 0.9 + pulse * 0.4 * emphasis;
+          finalWeight *= 1 + emphasis * 0.24;
         }
 
         vertexColors[baseIndex] = colorR * finalWeight;
@@ -500,6 +550,7 @@ export class HyperRenderer {
     }
 
     const shouldRenderEdges = showLines || useSlice || useShadow;
+    const edgeStride = edgeVisibility ? 1 : this.edgeStride;
 
     if (!shouldRenderEdges) {
       this.slicePointCount = 0;
@@ -509,7 +560,7 @@ export class HyperRenderer {
       this.shadowLines.visible = false;
       this.lineGeometry.setDrawRange(0, 0);
     } else {
-      for (let i = 0; i < this.object.edges.length; i += 1) {
+      for (let i = 0; i < this.object.edges.length; i += edgeStride) {
         const [aIndex, bIndex] = this.object.edges[i];
         const a4 = vertices4d[aIndex];
         const b4 = vertices4d[bIndex];
