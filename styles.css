@@ -119,6 +119,24 @@
   border-style: dashed;
 }
 
+.hyper-label-chrome-off .hyper-label {
+  max-width: 260px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 8px rgba(2, 8, 18, 0.96);
+}
+
+.hyper-label-chrome-off .hyper-label-focus,
+.hyper-label-chrome-off .hyper-label-missing {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
 .hyper-toolbar {
   position: absolute;
   top: 12px;
@@ -329,16 +347,19 @@
 }
 
 .hyper-config-row-checkbox {
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
 .hyper-config-row-checkbox label {
-  flex: 1 1 auto;
   margin: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  letter-spacing: 0.05em;
 }
 
 .hyper-config-row select,
