@@ -46,3 +46,29 @@ test('pickVisibleLabels always keeps focus node and removes overlapping labels',
   assert.ok(selected.some((item) => item.index === 3));
   assert.ok(!selected.some((item) => item.index === 2));
 });
+
+test('pickVisibleLabels keeps mandatory labels even when overlapping', () => {
+  const selected = pickVisibleLabels([
+    candidate({ index: 1, x: 100, y: 100, weight: 0.2, mandatory: true }),
+    candidate({ index: 2, x: 104, y: 100, weight: 0.9, mandatory: true }),
+    candidate({ index: 3, x: 320, y: 260, weight: 0.8 }),
+  ], 3);
+
+  assert.equal(selected.length, 3);
+  assert.ok(selected.some((item) => item.index === 1));
+  assert.ok(selected.some((item) => item.index === 2));
+  assert.ok(selected.some((item) => item.index === 3));
+});
+
+test('pickVisibleLabels supports denser placement via overlapScale', () => {
+  const sample = [
+    candidate({ index: 1, x: 100, y: 100, weight: 0.9 }),
+    candidate({ index: 2, x: 118, y: 100, weight: 0.8 }),
+    candidate({ index: 3, x: 136, y: 100, weight: 0.7 }),
+  ];
+
+  const sparse = pickVisibleLabels(sample, 3, { overlapScale: 1.5 });
+  const dense = pickVisibleLabels(sample, 3, { overlapScale: 0.55 });
+
+  assert.ok(dense.length >= sparse.length);
+});

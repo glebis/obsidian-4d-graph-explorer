@@ -98,3 +98,17 @@ test('settings flow: auto performance mode toggle stays visual-only', () => {
   timers.advanceBy(200);
   assert.deepEqual(refreshes, [false]);
 });
+
+test('settings flow: label display options stay visual-only', () => {
+  const timers = new FakeTimers();
+  const refreshes: boolean[] = [];
+  const scheduler = new GraphRefreshScheduler({
+    setTimeout: (callback, delayMs) => timers.setTimeout(callback, delayMs),
+    clearTimeout: (id) => timers.clearTimeout(id),
+    onRefresh: (reloadGraph) => refreshes.push(reloadGraph),
+  });
+
+  scheduler.schedule(visualSettingRefreshOptions('label-display').reloadGraph);
+  timers.advanceBy(200);
+  assert.deepEqual(refreshes, [false]);
+});

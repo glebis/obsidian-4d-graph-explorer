@@ -83,6 +83,7 @@ interface GraphLabelPayload {
     label: string;
     summary: string;
     category: string;
+    importance?: number | null;
     emoji?: string;
     media?: unknown[];
     imageUrl?: string;
@@ -90,6 +91,8 @@ interface GraphLabelPayload {
     raw?: unknown | null;
   }>;
   vertexVisibility?: number[] | null;
+  degrees?: number[] | null;
+  adjacency?: number[][] | null;
   graphState?: GraphRenderState | null;
 }
 
@@ -196,6 +199,20 @@ export class GraphExplorerView extends ItemView {
   private showLinksToggleEl!: HTMLInputElement;
   private autoPerformanceModeToggleEl!: HTMLInputElement;
   private showOnlyExistingFilesToggleEl!: HTMLInputElement;
+  private labelRankingSelectEl!: HTMLSelectElement;
+  private labelFontScalingSelectEl!: HTMLSelectElement;
+  private labelScaleSourceSelectEl!: HTMLSelectElement;
+  private labelMinFontSliderEl!: HTMLInputElement;
+  private labelMinFontValueEl!: HTMLSpanElement;
+  private labelMaxFontSliderEl!: HTMLInputElement;
+  private labelMaxFontValueEl!: HTMLSpanElement;
+  private labelDensitySliderEl!: HTMLInputElement;
+  private labelDensityValueEl!: HTMLSpanElement;
+  private labelPinnedContextToggleEl!: HTMLInputElement;
+  private labelPinnedImportantSliderEl!: HTMLInputElement;
+  private labelPinnedImportantValueEl!: HTMLSpanElement;
+  private labelShowChromeToggleEl!: HTMLInputElement;
+  private labelShowEmojiToggleEl!: HTMLInputElement;
   private configToggleBtn!: HTMLButtonElement;
   private analysisToggleBtn!: HTMLButtonElement;
   private refreshBtn!: HTMLButtonElement;
@@ -247,6 +264,10 @@ export class GraphExplorerView extends ItemView {
   private renderRequested = true;
   private focusLookAtTarget = new Vector3(0, 0, 0);
   private activeTheme = getTheme('neon');
+  private cachedTopImportantIndexes: number[] = [];
+  private cachedTopImportantLabelsRef: GraphLabelPayload['labels'] | null = null;
+  private cachedTopImportantDegreesRef: number[] | null = null;
+  private cachedTopImportantCount = -1;
   private readonly fullscreenChangeHandler = () => {
     this.updateFullscreenButton();
   };
@@ -312,6 +333,10 @@ export class GraphExplorerView extends ItemView {
     this.updateLinkForceDisplay();
     this.updateLinkDistanceDisplay();
     this.updateNodeSizeDisplay();
+    this.updateLabelMinFontDisplay();
+    this.updateLabelMaxFontDisplay();
+    this.updateLabelDensityDisplay();
+    this.updatePinnedImportantDisplay();
     if (this.showLinksToggleEl) {
       this.showLinksToggleEl.checked = settings.showLinks;
     }
@@ -321,8 +346,32 @@ export class GraphExplorerView extends ItemView {
     if (this.showOnlyExistingFilesToggleEl) {
       this.showOnlyExistingFilesToggleEl.checked = settings.showOnlyExistingFiles;
     }
+    if (this.labelRankingSelectEl) {
+      this.labelRankingSelectEl.value = settings.labelRankingMode;
+    }
+    if (this.labelFontScalingSelectEl) {
+      this.labelFontScalingSelectEl.value = settings.labelFontScaling;
+    }
+    if (this.labelScaleSourceSelectEl) {
+      this.labelScaleSourceSelectEl.value = settings.labelScaleSource;
+      this.labelScaleSourceSelectEl.disabled = settings.labelFontScaling === 'fixed';
+    }
+    if (this.labelPinnedContextToggleEl) {
+      this.labelPinnedContextToggleEl.checked = settings.labelPinnedContext;
+    }
+    if (this.labelShowChromeToggleEl) {
+      this.labelShowChromeToggleEl.checked = settings.labelShowChrome;
+    }
+    if (this.labelShowEmojiToggleEl) {
+      this.labelShowEmojiToggleEl.checked = settings.labelShowEmoji;
+    }
+    this.updateLabelMinFontDisplay();
+    this.updateLabelMaxFontDisplay();
+    this.updateLabelDensityDisplay();
+    this.updatePinnedImportantDisplay();
     this.syncRendererPerformanceProfile();
     this.updateTheme();
+    this.updateLabelPresentation();
     this.applyLabelFont();
     this.requestRender();
   }
@@ -415,6 +464,11 @@ export class GraphExplorerView extends ItemView {
     }
   }
 
+  private updateLabelPresentation(): void {
+    if (!this.rootEl) return;
+    this.rootEl.classList.toggle('hyper-label-chrome-off', !this.settings.labelShowChrome);
+  }
+
   getViewType(): string {
     return HYPER_VIEW_TYPE;
   }
@@ -500,6 +554,7 @@ export class GraphExplorerView extends ItemView {
     this.renderer = new HyperRenderer(this.canvasEl);
     this.syncRendererPerformanceProfile();
     this.updateTheme();
+    this.updateLabelPresentation();
     this.applyLabelFont();
     this.applyCameraPreset(this.state.camera.preset);
     this.renderer.setGraphLabelCallback((payload: GraphLabelPayload) => this.onGraphPayload(payload));
@@ -889,6 +944,213 @@ export class GraphExplorerView extends ItemView {
       this.notifyVisualSettingChange('show-only-existing-files');
     });
 
+    // Label display settings
+    body.createEl('h4', { text: 'Labels' });
+
+    const labelRankingRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelRankingId = `hyper-label-ranking-${uniqueSuffix}`;
+    labelRankingRow.createEl('label', { text: 'Label ranking', attr: { for: labelRankingId } });
+    this.labelRankingSelectEl = labelRankingRow.createEl('select', { attr: { id: labelRankingId } });
+    [
+      { id: 'depth', label: 'Depth first' },
+      { id: 'importance', label: 'Importance first' },
+      { id: 'hybrid', label: 'Hybrid' },
+    ].forEach((option) => createOption(this.labelRankingSelectEl, option));
+    this.labelRankingSelectEl.value = this.settings.labelRankingMode;
+    this.labelRankingSelectEl.addEventListener('change', () => {
+      this.settings.labelRankingMode = this.labelRankingSelectEl.value as GraphExplorerSettings['labelRankingMode'];
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
+    const labelFontScalingRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelFontScalingId = `hyper-label-font-scaling-${uniqueSuffix}`;
+    labelFontScalingRow.createEl('label', { text: 'Font scaling', attr: { for: labelFontScalingId } });
+    this.labelFontScalingSelectEl = labelFontScalingRow.createEl('select', { attr: { id: labelFontScalingId } });
+    [
+      { id: 'fixed', label: 'Fixed size' },
+      { id: 'proportional', label: 'Proportional' },
+    ].forEach((option) => createOption(this.labelFontScalingSelectEl, option));
+    this.labelFontScalingSelectEl.value = this.settings.labelFontScaling;
+    this.labelFontScalingSelectEl.addEventListener('change', () => {
+      this.settings.labelFontScaling = this.labelFontScalingSelectEl.value as GraphExplorerSettings['labelFontScaling'];
+      if (this.labelScaleSourceSelectEl) {
+        this.labelScaleSourceSelectEl.disabled = this.settings.labelFontScaling === 'fixed';
+      }
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
+    const labelScaleSourceRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelScaleSourceId = `hyper-label-scale-source-${uniqueSuffix}`;
+    labelScaleSourceRow.createEl('label', { text: 'Scale source', attr: { for: labelScaleSourceId } });
+    this.labelScaleSourceSelectEl = labelScaleSourceRow.createEl('select', { attr: { id: labelScaleSourceId } });
+    [
+      { id: 'depth', label: 'Depth' },
+      { id: 'importance', label: 'Importance' },
+      { id: 'hybrid', label: 'Hybrid' },
+    ].forEach((option) => createOption(this.labelScaleSourceSelectEl, option));
+    this.labelScaleSourceSelectEl.value = this.settings.labelScaleSource;
+    this.labelScaleSourceSelectEl.disabled = this.settings.labelFontScaling === 'fixed';
+    this.labelScaleSourceSelectEl.addEventListener('change', () => {
+      this.settings.labelScaleSource = this.labelScaleSourceSelectEl.value as GraphExplorerSettings['labelScaleSource'];
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
+    const labelMinFontRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelMinFontId = `hyper-label-min-font-${uniqueSuffix}`;
+    labelMinFontRow.createEl('label', { text: 'Min font', attr: { for: labelMinFontId } });
+    const labelMinFontControl = labelMinFontRow.createDiv({ cls: 'hyper-config-control' });
+    this.labelMinFontSliderEl = labelMinFontControl.createEl('input', {
+      attr: {
+        id: labelMinFontId,
+        type: 'range',
+        min: '8',
+        max: '24',
+        step: '0.5',
+        value: this.settings.labelMinFontSize.toFixed(1),
+      },
+    });
+    this.labelMinFontSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.labelMinFontSize = value;
+      if (this.settings.labelMaxFontSize < value + 1) {
+        this.settings.labelMaxFontSize = value + 1;
+      }
+      this.updateLabelMinFontDisplay();
+      this.updateLabelMaxFontDisplay();
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+    this.labelMinFontValueEl = labelMinFontControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const labelMaxFontRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelMaxFontId = `hyper-label-max-font-${uniqueSuffix}`;
+    labelMaxFontRow.createEl('label', { text: 'Max font', attr: { for: labelMaxFontId } });
+    const labelMaxFontControl = labelMaxFontRow.createDiv({ cls: 'hyper-config-control' });
+    this.labelMaxFontSliderEl = labelMaxFontControl.createEl('input', {
+      attr: {
+        id: labelMaxFontId,
+        type: 'range',
+        min: '12',
+        max: '40',
+        step: '0.5',
+        value: this.settings.labelMaxFontSize.toFixed(1),
+      },
+    });
+    this.labelMaxFontSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.labelMaxFontSize = value;
+      if (this.settings.labelMinFontSize > value - 1) {
+        this.settings.labelMinFontSize = Math.max(8, value - 1);
+      }
+      this.updateLabelMinFontDisplay();
+      this.updateLabelMaxFontDisplay();
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+    this.labelMaxFontValueEl = labelMaxFontControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const labelDensityRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelDensityId = `hyper-label-density-${uniqueSuffix}`;
+    labelDensityRow.createEl('label', { text: 'Density', attr: { for: labelDensityId } });
+    const labelDensityControl = labelDensityRow.createDiv({ cls: 'hyper-config-control' });
+    this.labelDensitySliderEl = labelDensityControl.createEl('input', {
+      attr: {
+        id: labelDensityId,
+        type: 'range',
+        min: '0.6',
+        max: '2',
+        step: '0.05',
+        value: this.settings.labelDensity.toFixed(2),
+      },
+    });
+    this.labelDensitySliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.labelDensity = value;
+      this.updateLabelDensityDisplay();
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+    this.labelDensityValueEl = labelDensityControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const labelPinnedContextRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
+    const labelPinnedContextId = `hyper-label-pinned-context-${uniqueSuffix}`;
+    labelPinnedContextRow.createEl('label', { text: 'Pinned context labels', attr: { for: labelPinnedContextId } });
+    this.labelPinnedContextToggleEl = labelPinnedContextRow.createEl('input', {
+      attr: {
+        id: labelPinnedContextId,
+        type: 'checkbox',
+      },
+    });
+    this.labelPinnedContextToggleEl.checked = this.settings.labelPinnedContext;
+    this.labelPinnedContextToggleEl.addEventListener('change', (event) => {
+      this.settings.labelPinnedContext = (event.target as HTMLInputElement).checked;
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
+    const labelPinnedImportantRow = body.createDiv({ cls: 'hyper-config-row' });
+    const labelPinnedImportantId = `hyper-label-pinned-important-${uniqueSuffix}`;
+    labelPinnedImportantRow.createEl('label', { text: 'Pinned top important', attr: { for: labelPinnedImportantId } });
+    const labelPinnedImportantControl = labelPinnedImportantRow.createDiv({ cls: 'hyper-config-control' });
+    this.labelPinnedImportantSliderEl = labelPinnedImportantControl.createEl('input', {
+      attr: {
+        id: labelPinnedImportantId,
+        type: 'range',
+        min: '0',
+        max: '20',
+        step: '1',
+        value: this.settings.labelPinnedImportantCount.toFixed(0),
+      },
+    });
+    this.labelPinnedImportantSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.labelPinnedImportantCount = Math.max(0, Math.round(value));
+      this.updatePinnedImportantDisplay();
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+    this.labelPinnedImportantValueEl = labelPinnedImportantControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const labelShowChromeRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
+    const labelShowChromeId = `hyper-label-show-chrome-${uniqueSuffix}`;
+    labelShowChromeRow.createEl('label', { text: 'Label border & background', attr: { for: labelShowChromeId } });
+    this.labelShowChromeToggleEl = labelShowChromeRow.createEl('input', {
+      attr: {
+        id: labelShowChromeId,
+        type: 'checkbox',
+      },
+    });
+    this.labelShowChromeToggleEl.checked = this.settings.labelShowChrome;
+    this.labelShowChromeToggleEl.addEventListener('change', (event) => {
+      this.settings.labelShowChrome = (event.target as HTMLInputElement).checked;
+      this.updateLabelPresentation();
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
+    const labelShowEmojiRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
+    const labelShowEmojiId = `hyper-label-show-emoji-${uniqueSuffix}`;
+    labelShowEmojiRow.createEl('label', { text: 'Show emoji in labels', attr: { for: labelShowEmojiId } });
+    this.labelShowEmojiToggleEl = labelShowEmojiRow.createEl('input', {
+      attr: {
+        id: labelShowEmojiId,
+        type: 'checkbox',
+      },
+    });
+    this.labelShowEmojiToggleEl.checked = this.settings.labelShowEmoji;
+    this.labelShowEmojiToggleEl.addEventListener('change', (event) => {
+      this.settings.labelShowEmoji = (event.target as HTMLInputElement).checked;
+      this.markLabelsDirty(true);
+      this.notifyVisualSettingChange('label-display');
+    });
+
     // Color rules
     body.createEl('h4', { text: 'Custom Colors' });
 
@@ -1234,6 +1496,10 @@ export class GraphExplorerView extends ItemView {
       this.updateLinkForceDisplay();
       this.updateLinkDistanceDisplay();
       this.updateNodeSizeDisplay();
+      this.updateLabelMinFontDisplay();
+      this.updateLabelMaxFontDisplay();
+      this.updateLabelDensityDisplay();
+      this.updatePinnedImportantDisplay();
     }
   }
 
@@ -1356,6 +1622,34 @@ export class GraphExplorerView extends ItemView {
     const value = this.settings.nodeSizeMultiplier;
     this.nodeSizeSliderEl.value = value.toFixed(2);
     this.nodeSizeValueEl.textContent = value.toFixed(2);
+  }
+
+  private updateLabelMinFontDisplay() {
+    if (!this.labelMinFontSliderEl || !this.labelMinFontValueEl) return;
+    const value = this.settings.labelMinFontSize;
+    this.labelMinFontSliderEl.value = value.toFixed(1);
+    this.labelMinFontValueEl.textContent = `${value.toFixed(1)}px`;
+  }
+
+  private updateLabelMaxFontDisplay() {
+    if (!this.labelMaxFontSliderEl || !this.labelMaxFontValueEl) return;
+    const value = this.settings.labelMaxFontSize;
+    this.labelMaxFontSliderEl.value = value.toFixed(1);
+    this.labelMaxFontValueEl.textContent = `${value.toFixed(1)}px`;
+  }
+
+  private updateLabelDensityDisplay() {
+    if (!this.labelDensitySliderEl || !this.labelDensityValueEl) return;
+    const value = this.settings.labelDensity;
+    this.labelDensitySliderEl.value = value.toFixed(2);
+    this.labelDensityValueEl.textContent = `${value.toFixed(2)}x`;
+  }
+
+  private updatePinnedImportantDisplay() {
+    if (!this.labelPinnedImportantSliderEl || !this.labelPinnedImportantValueEl) return;
+    const value = Math.max(0, Math.round(this.settings.labelPinnedImportantCount));
+    this.labelPinnedImportantSliderEl.value = value.toFixed(0);
+    this.labelPinnedImportantValueEl.textContent = value.toFixed(0);
   }
 
   private updateCameraZoom() {
@@ -1918,6 +2212,89 @@ export class GraphExplorerView extends ItemView {
     this.visibleLabelIndexes = [];
   }
 
+  private clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private resolveLabelMetric(
+    mode: GraphExplorerSettings['labelRankingMode'] | GraphExplorerSettings['labelScaleSource'],
+    depthScore: number,
+    importanceScore: number,
+  ): number {
+    if (mode === 'depth') return this.clamp01(depthScore);
+    if (mode === 'importance') return this.clamp01(importanceScore);
+    return this.clamp01(depthScore * 0.6 + importanceScore * 0.4);
+  }
+
+  private computeImportanceScore(
+    index: number,
+    node: GraphLabelPayload['labels'][number],
+    degrees: number[] | null | undefined,
+    maxDegree: number,
+  ): number {
+    const importanceRaw = Number(node.importance ?? 0);
+    const importance = Number.isFinite(importanceRaw) ? this.clamp01(importanceRaw / 6) : 0;
+    const degreeValue = degrees ? Number(degrees[index] ?? 0) : 0;
+    const degree = maxDegree > 0 ? this.clamp01(degreeValue / maxDegree) : 0;
+    return Math.max(importance, degree * 0.92);
+  }
+
+  private getTopImportantIndexes(payload: GraphLabelPayload, maxCount: number): number[] {
+    const count = Math.max(0, Math.round(maxCount));
+    if (count === 0) {
+      return [];
+    }
+    if (
+      this.cachedTopImportantLabelsRef === payload.labels
+      && this.cachedTopImportantDegreesRef === (payload.degrees ?? null)
+      && this.cachedTopImportantCount === count
+    ) {
+      return this.cachedTopImportantIndexes;
+    }
+
+    const maxDegree = Math.max(1, ...(payload.degrees ?? [0]));
+    const scored: Array<{ index: number; score: number }> = [];
+    for (let i = 0; i < payload.labels.length; i += 1) {
+      const node = payload.labels[i];
+      if (!node) continue;
+      const score = this.computeImportanceScore(i, node, payload.degrees, maxDegree);
+      scored.push({ index: i, score });
+    }
+    scored.sort((a, b) => b.score - a.score || a.index - b.index);
+    this.cachedTopImportantIndexes = scored.slice(0, count).map((item) => item.index);
+    this.cachedTopImportantLabelsRef = payload.labels;
+    this.cachedTopImportantDegreesRef = payload.degrees ?? null;
+    this.cachedTopImportantCount = count;
+    return this.cachedTopImportantIndexes;
+  }
+
+  private collectMandatoryLabelIndexes(payload: GraphLabelPayload, focusIndex: number): Set<number> {
+    const mandatory = new Set<number>();
+    if (!this.settings.labelPinnedContext) {
+      return mandatory;
+    }
+
+    if (focusIndex >= 0) {
+      mandatory.add(focusIndex);
+      const neighbors = payload.adjacency?.[focusIndex] ?? [];
+      for (let i = 0; i < neighbors.length && i < 10; i += 1) {
+        const neighborIndex = neighbors[i];
+        if (neighborIndex >= 0 && neighborIndex < payload.labels.length) {
+          mandatory.add(neighborIndex);
+        }
+      }
+    }
+
+    const topImportant = this.getTopImportantIndexes(payload, this.settings.labelPinnedImportantCount);
+    for (let i = 0; i < topImportant.length; i += 1) {
+      const index = topImportant[i];
+      if (index >= 0 && index < payload.labels.length) {
+        mandatory.add(index);
+      }
+    }
+    return mandatory;
+  }
+
   private renderLabels(payload: GraphLabelPayload) {
     if (!this.labelLayer) return;
     const isGraph = this.activeObject.meta?.type === 'graph';
@@ -1935,10 +2312,19 @@ export class GraphExplorerView extends ItemView {
     const { positions, labels, vertexVisibility } = payload;
     const focusIndex = this.selectedNodeIndex ?? -1;
     const profile = getLabelPerformanceProfile(labels.length);
-    const MAX_VISIBLE_LABELS = profile.maxVisibleLabels;
-    const MAX_CANDIDATE_POOL = profile.maxCandidatePool;
+    const density = Math.max(0.6, Math.min(2, Number(this.settings.labelDensity) || 1));
+    const MAX_VISIBLE_LABELS = Math.max(8, Math.round(profile.maxVisibleLabels * density));
+    const MAX_CANDIDATE_POOL = Math.max(
+      MAX_VISIBLE_LABELS,
+      Math.round(profile.maxCandidatePool * (0.72 + density * 0.68)),
+    );
     const MIN_VISIBILITY = profile.minVisibility;
     const MIN_OPACITY = profile.minOpacity;
+    const overlapScale = Math.max(0.55, Math.min(1.75, 1.2 / density));
+    const minFont = Math.max(8, Number(this.settings.labelMinFontSize) || 8);
+    const maxFont = Math.max(minFont + 1, Number(this.settings.labelMaxFontSize) || (minFont + 1));
+    const maxDegree = Math.max(1, ...(payload.degrees ?? [0]));
+    const mandatoryIndexes = this.collectMandatoryLabelIndexes(payload, focusIndex);
 
     while (this.labelElements.length < labels.length) {
       const el = document.createElement('div');
@@ -1953,8 +2339,11 @@ export class GraphExplorerView extends ItemView {
       const node = labels[i];
       const pos = positions[i];
       if (!node || !pos) continue;
+      const focus = focusIndex === i;
+      const pinned = mandatoryIndexes.has(i);
+      const mandatory = focus || pinned;
       const visibility = vertexVisibility ? vertexVisibility[i] ?? 0 : 1;
-      if (visibility <= MIN_VISIBILITY) {
+      if (visibility <= MIN_VISIBILITY && !mandatory) {
         continue;
       }
       this.tempVec.set(pos[0], pos[1], pos[2]).project(camera);
@@ -1969,18 +2358,37 @@ export class GraphExplorerView extends ItemView {
       const depthNorm = Math.min(1, Math.max(0, (this.tempVec.z + 1) * 0.5));
       const depthFactor = 1 - Math.pow(depthNorm, 1.8);
       const radialFalloff = 1 - Math.min(1, Math.hypot(ndcX, ndcY) / 1.35);
-      const focusBoost = focusIndex === i ? 1.6 : 1;
-      const weight = visibility * (0.45 + depthFactor * 0.55) * (0.55 + radialFalloff * 0.45) * focusBoost;
-      const opacity = focusIndex === i ? 1 : Math.min(1, Math.max(MIN_OPACITY, weight));
-      const baseSize = focusIndex === i ? 21 : 14;
-      const fontSize = Math.max(11, baseSize + depthFactor * 8 + visibility * 4);
+      const depthScore = this.clamp01(depthFactor * 0.74 + radialFalloff * 0.26);
+      const importanceScore = this.computeImportanceScore(i, node, payload.degrees, maxDegree);
+      const rankScore = this.resolveLabelMetric(this.settings.labelRankingMode, depthScore, importanceScore);
+      const scaleScore = this.resolveLabelMetric(this.settings.labelScaleSource, depthScore, importanceScore);
+
+      const visibilityWeight = this.clamp01(0.25 + visibility * 0.75);
+      const focusBoost = focus ? 1.65 : 1;
+      const pinnedBoost = pinned ? 1.18 : 1;
+      const weight = visibilityWeight * (0.4 + rankScore * 0.6) * focusBoost * pinnedBoost;
+      let opacity = focus ? 1 : this.clamp01(Math.max(MIN_OPACITY, 0.22 + weight * 0.85));
+      if (mandatory) {
+        opacity = Math.max(opacity, 0.62);
+      }
+
+      let fontSize = minFont + (maxFont - minFont) * 0.5;
+      if (this.settings.labelFontScaling === 'proportional') {
+        fontSize = minFont + (maxFont - minFont) * scaleScore;
+      }
+      if (pinned && !focus) {
+        fontSize = Math.max(fontSize, minFont + (maxFont - minFont) * 0.34);
+      }
+      if (focus) {
+        fontSize = Math.min(maxFont + 4, fontSize + 2.4);
+      }
       const x = (ndcX + 1) * 0.5 * width;
       const y = (1 - ndcY) * 0.5 * height;
       const rawLabel = node.label.replace(/^\d{8}-/, '');
-      const text = node.emoji ? `${node.emoji} ${rawLabel}` : rawLabel;
+      const text = this.settings.labelShowEmoji && node.emoji ? `${node.emoji} ${rawLabel}` : rawLabel;
       const missing = node.category === 'missing';
 
-      pushCandidateToPool(candidates, {
+      const candidate: LabelCandidate = {
         index: i,
         text,
         x,
@@ -1988,9 +2396,15 @@ export class GraphExplorerView extends ItemView {
         opacity,
         weight,
         fontSize,
-        focus: focusIndex === i,
+        focus,
+        mandatory,
         missing,
-      }, MAX_CANDIDATE_POOL);
+      };
+      if (mandatory) {
+        candidates.push(candidate);
+      } else {
+        pushCandidateToPool(candidates, candidate, MAX_CANDIDATE_POOL);
+      }
     }
 
     this.hideVisibleLabels();
@@ -1999,7 +2413,7 @@ export class GraphExplorerView extends ItemView {
       return;
     }
 
-    const visible = pickVisibleLabels(candidates, MAX_VISIBLE_LABELS);
+    const visible = pickVisibleLabels(candidates, MAX_VISIBLE_LABELS, { overlapScale });
 
     for (const candidate of visible) {
       const el = this.labelElements[candidate.index];

@@ -7,6 +7,7 @@ export interface LabelCandidate {
   weight: number;
   fontSize: number;
   focus: boolean;
+  mandatory?: boolean;
   missing: boolean;
 }
 
@@ -37,17 +38,35 @@ export function pushCandidateToPool(pool: LabelCandidate[], candidate: LabelCand
 
 export function pickVisibleLabels(
   candidates: LabelCandidate[],
-  maxVisibleLabels: number
+  maxVisibleLabels: number,
+  options: { overlapScale?: number } = {}
 ): LabelCandidate[] {
   if (candidates.length === 0 || maxVisibleLabels <= 0) {
     return [];
   }
 
+  const overlapScale = Math.max(0.5, Math.min(2, options.overlapScale ?? 1));
+  const mandatoryCandidates = candidates
+    .filter((candidate) => candidate.mandatory)
+    .sort((a, b) => b.weight - a.weight);
   const focusCandidate = candidates.find((candidate) => candidate.focus) ?? null;
   const sorted = [...candidates].sort((a, b) => b.weight - a.weight);
   const visible: LabelCandidate[] = [];
 
-  if (focusCandidate) {
+  for (const mandatoryCandidate of mandatoryCandidates) {
+    if (visible.some((existing) => existing.index === mandatoryCandidate.index)) {
+      continue;
+    }
+    visible.push({
+      ...mandatoryCandidate,
+      weight: Math.max(mandatoryCandidate.weight, mandatoryCandidate.focus ? 1.2 : mandatoryCandidate.weight),
+    });
+    if (visible.length >= maxVisibleLabels) {
+      return visible;
+    }
+  }
+
+  if (focusCandidate && !visible.some((candidate) => candidate.index === focusCandidate.index)) {
     visible.push({
       ...focusCandidate,
       weight: Math.max(focusCandidate.weight, 1.2),
@@ -62,7 +81,7 @@ export function pickVisibleLabels(
     for (const existing of visible) {
       const dx = candidate.x - existing.x;
       const dy = candidate.y - existing.y;
-      const threshold = Math.max(28, (candidate.fontSize + existing.fontSize) * 0.34);
+      const threshold = Math.max(20, (candidate.fontSize + existing.fontSize) * 0.34 * overlapScale);
       if (dx * dx + dy * dy < threshold * threshold) {
         overlaps = true;
         break;

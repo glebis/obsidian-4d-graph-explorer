@@ -21,6 +21,16 @@ export interface GraphExplorerSettings {
   nodeSizeMultiplier: number;
   showLinks: boolean;
   autoPerformanceMode: boolean;
+  labelRankingMode: 'depth' | 'importance' | 'hybrid';
+  labelFontScaling: 'fixed' | 'proportional';
+  labelScaleSource: 'depth' | 'importance' | 'hybrid';
+  labelMinFontSize: number;
+  labelMaxFontSize: number;
+  labelDensity: number;
+  labelPinnedContext: boolean;
+  labelPinnedImportantCount: number;
+  labelShowChrome: boolean;
+  labelShowEmoji: boolean;
   showOnlyExistingFiles: boolean;
   colorRules: ColorRule[];
   theme: string;
@@ -35,6 +45,16 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   nodeSizeMultiplier: 1,
   showLinks: true,
   autoPerformanceMode: true,
+  labelRankingMode: 'hybrid',
+  labelFontScaling: 'proportional',
+  labelScaleSource: 'hybrid',
+  labelMinFontSize: 11,
+  labelMaxFontSize: 22,
+  labelDensity: 1,
+  labelPinnedContext: true,
+  labelPinnedImportantCount: 6,
+  labelShowChrome: true,
+  labelShowEmoji: true,
   showOnlyExistingFiles: true,
   colorRules: [],
   theme: 'neon',

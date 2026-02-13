@@ -3,6 +3,7 @@ export type VisualSettingAction =
   | 'node-size'
   | 'show-links'
   | 'auto-performance-mode'
+  | 'label-display'
   | 'show-only-existing-files'
   | 'color-rules'
   | 'label-font';

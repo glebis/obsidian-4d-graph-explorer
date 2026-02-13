@@ -6,6 +6,7 @@ test('visualSettingPolicy keeps theme and label font changes as visual-only refr
   assert.equal(visualSettingRequiresGraphReload('theme'), false);
   assert.equal(visualSettingRequiresGraphReload('label-font'), false);
   assert.equal(visualSettingRequiresGraphReload('auto-performance-mode'), false);
+  assert.equal(visualSettingRequiresGraphReload('label-display'), false);
   assert.deepEqual(visualSettingRefreshOptions('theme'), { reloadGraph: false });
 });
 

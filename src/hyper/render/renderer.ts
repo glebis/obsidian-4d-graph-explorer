@@ -69,6 +69,8 @@ export class HyperRenderer {
     this.theme = null;
     this.isGraph = false;
     this.graphMeta = null;
+    this.graphDegrees = null;
+    this.graphAdjacency = null;
     this.graphLabelCallback = null;
     this.graphLabelPayload = null;
     this.lastGraphLabelPushAt = 0;
@@ -157,6 +159,13 @@ export class HyperRenderer {
     this.object = object;
     this.isGraph = !!(object?.meta && object.meta.type === 'graph');
     this.graphMeta = this.isGraph ? object.meta : null;
+    if (this.graphMeta?.adjacency) {
+      this.graphAdjacency = this.graphMeta.adjacency;
+      this.graphDegrees = this.graphMeta.adjacency.map((neighbors) => neighbors.length);
+    } else {
+      this.graphAdjacency = null;
+      this.graphDegrees = null;
+    }
     this.vertexCache3 = new Array(object.vertices.length).fill(null);
     this.lineThemeColorCache = new Float32Array(object.vertices.length * 3);
     this.lastGraphLabelPushAt = 0;
@@ -542,6 +551,8 @@ export class HyperRenderer {
         positions: projected,
         labels: graphMeta.nodes,
         vertexVisibility,
+        degrees: this.graphDegrees,
+        adjacency: this.graphAdjacency,
         graphState,
       };
       if (this.graphLabelCallback) {
