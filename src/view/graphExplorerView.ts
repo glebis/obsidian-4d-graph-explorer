@@ -1488,6 +1488,7 @@ export class GraphExplorerView extends ItemView {
     if (this.configToggleBtn) {
       this.configToggleBtn.classList.toggle('is-active', this.configVisible);
     }
+    this.syncFloatingPanelVisibility();
     if (this.configVisible) {
       this.updateZoomDisplay();
       this.updateSpeedDisplay();
@@ -1515,6 +1516,7 @@ export class GraphExplorerView extends ItemView {
     if (this.analysisToggleBtn) {
       this.analysisToggleBtn.classList.toggle('is-active', this.analysisVisible);
     }
+    this.syncFloatingPanelVisibility();
     if (this.analysisVisible) {
       this.updateAnalysisUI();
     }
@@ -1548,10 +1550,18 @@ export class GraphExplorerView extends ItemView {
 
     const display = this.uiVisible ? '' : 'none';
     if (this.toolbarEl) this.toolbarEl.style.display = display;
-    if (this.configPanelEl) this.configPanelEl.style.display = this.uiVisible && this.configVisible ? '' : 'none';
-    if (this.analysisModalEl) this.analysisModalEl.style.display = this.uiVisible && this.analysisVisible ? '' : 'none';
+    this.syncFloatingPanelVisibility();
     if (this.nodeInfoEl) this.nodeInfoEl.style.display = this.uiVisible && this.nodeInfoEl.textContent ? '' : 'none';
     if (this.imageStripEl) this.imageStripEl.style.display = this.uiVisible && this.imageStripEl.childElementCount > 0 ? '' : 'none';
+  }
+
+  private syncFloatingPanelVisibility() {
+    if (this.configPanelEl) {
+      this.configPanelEl.style.display = this.uiVisible && this.configVisible ? '' : 'none';
+    }
+    if (this.analysisModalEl) {
+      this.analysisModalEl.style.display = this.uiVisible && this.analysisVisible ? '' : 'none';
+    }
   }
 
   private toggleFullscreen() {

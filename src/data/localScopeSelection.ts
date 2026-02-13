@@ -66,6 +66,37 @@ function runBreadthFirstSelection(
   return result;
 }
 
+function runSelectionWithAdaptiveDepth(
+  seedPaths: string[],
+  depthStart: number,
+  depthMax: number,
+  includeCanvas: boolean,
+  resolvedLinks: ResolvedLinks,
+  reverseLinks: Map<string, Set<string>>,
+  stopAt: number
+): Set<string> {
+  let best = runBreadthFirstSelection(
+    seedPaths,
+    depthStart,
+    includeCanvas,
+    resolvedLinks,
+    reverseLinks
+  );
+
+  for (let depth = depthStart + 1; depth <= depthMax; depth += 1) {
+    if (best.size >= stopAt) break;
+    best = runBreadthFirstSelection(
+      seedPaths,
+      depth,
+      includeCanvas,
+      resolvedLinks,
+      reverseLinks
+    );
+  }
+
+  return best;
+}
+
 export function selectLocalScopePaths(options: LocalScopeSelectionOptions): Set<string> {
   const depthStart = Math.max(0, Math.round(options.depth));
   const depthMax = Math.max(depthStart, Math.round(options.maxDepth));
@@ -80,26 +111,37 @@ export function selectLocalScopePaths(options: LocalScopeSelectionOptions): Set<
     return new Set<string>();
   }
 
-  let best = runBreadthFirstSelection(
+  const baseSeeds = new Set(seedPaths);
+  let best = runSelectionWithAdaptiveDepth(
     seedPaths,
     depthStart,
+    depthMax,
     options.includeCanvas,
     options.resolvedLinks,
-    options.reverseLinks
+    options.reverseLinks,
+    minNodes
   );
 
-  for (let depth = depthStart + 1; depth <= depthMax; depth += 1) {
-    if (best.size >= minNodes) break;
-    best = runBreadthFirstSelection(
-      seedPaths,
-      depth,
-      options.includeCanvas,
-      options.resolvedLinks,
-      options.reverseLinks
-    );
+  if (best.size < minNodes) {
+    for (const fallbackSeed of fallbackSeeds) {
+      if (baseSeeds.has(fallbackSeed)) continue;
+      if (best.size >= minNodes) break;
+      const supplemental = runSelectionWithAdaptiveDepth(
+        [fallbackSeed],
+        depthStart,
+        depthMax,
+        options.includeCanvas,
+        options.resolvedLinks,
+        options.reverseLinks,
+        Math.max(1, minNodes - best.size)
+      );
+      supplemental.forEach((path) => {
+        best.add(path);
+      });
+    }
   }
 
-  if (!rootSeed && best.size < minNodes) {
+  if (best.size < minNodes) {
     for (const path of fallbackSeeds) {
       if (best.size >= minNodes) break;
       best.add(path);
