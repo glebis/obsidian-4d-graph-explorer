@@ -95,3 +95,24 @@ test('selectLocalScopePaths excludes canvas paths when includeCanvas is false', 
 
   assert.deepEqual(Array.from(selected).sort(), ['neighbor.md', 'root.md']);
 });
+
+test('selectLocalScopePaths augments sparse rooted selection with fallback neighborhoods', () => {
+  const resolvedLinks: ResolvedLinks = {
+    'root.md': {},
+    'recent.md': { 'nearby.md': 1 },
+    'nearby.md': {},
+  };
+
+  const selected = selectLocalScopePaths({
+    rootPath: 'root.md',
+    depth: 1,
+    minNodes: 3,
+    maxDepth: 3,
+    includeCanvas: true,
+    fallbackPaths: ['recent.md', 'nearby.md'],
+    resolvedLinks,
+    reverseLinks: buildReverseLinks(resolvedLinks),
+  });
+
+  assert.deepEqual(Array.from(selected).sort(), ['nearby.md', 'recent.md', 'root.md']);
+});
