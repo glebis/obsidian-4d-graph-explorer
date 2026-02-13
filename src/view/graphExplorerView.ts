@@ -629,7 +629,7 @@ export class GraphExplorerView extends ItemView {
   }
 
   private buildConfigPanel() {
-    this.configPanelEl = this.rootEl.createDiv({ cls: 'hyper-config-panel', attr: { 'aria-hidden': 'true' } });
+    this.configPanelEl = this.rootEl.createDiv({ cls: 'hyper-config-panel', attr: { 'aria-hidden': 'true', inert: '' } });
 
     const header = this.configPanelEl.createDiv({ cls: 'hyper-config-header' });
     header.createEl('h3', { text: 'Explorer Settings' });
@@ -1267,7 +1267,7 @@ export class GraphExplorerView extends ItemView {
 
     this.analysisModalEl = this.rootEl.createDiv({
       cls: 'hyper-analysis-modal',
-      attr: { 'aria-hidden': 'true' },
+      attr: { 'aria-hidden': 'true', inert: '' },
     });
 
     const modalHeader = this.analysisModalEl.createDiv({ cls: 'hyper-analysis-modal-header' });
@@ -1483,8 +1483,6 @@ export class GraphExplorerView extends ItemView {
     } else {
       this.configVisible = !this.configVisible;
     }
-    this.configPanelEl.classList.toggle('is-visible', this.configVisible);
-    this.configPanelEl.setAttribute('aria-hidden', this.configVisible ? 'false' : 'true');
     if (this.configToggleBtn) {
       this.configToggleBtn.classList.toggle('is-active', this.configVisible);
     }
@@ -1511,8 +1509,6 @@ export class GraphExplorerView extends ItemView {
     } else {
       this.analysisVisible = !this.analysisVisible;
     }
-    this.analysisModalEl.classList.toggle('is-visible', this.analysisVisible);
-    this.analysisModalEl.setAttribute('aria-hidden', this.analysisVisible ? 'false' : 'true');
     if (this.analysisToggleBtn) {
       this.analysisToggleBtn.classList.toggle('is-active', this.analysisVisible);
     }
@@ -1556,12 +1552,35 @@ export class GraphExplorerView extends ItemView {
   }
 
   private syncFloatingPanelVisibility() {
-    if (this.configPanelEl) {
-      this.configPanelEl.style.display = this.uiVisible && this.configVisible ? '' : 'none';
+    this.syncFloatingPanelState(this.configPanelEl, this.configVisible, this.configToggleBtn);
+    this.syncFloatingPanelState(this.analysisModalEl, this.analysisVisible, this.analysisToggleBtn);
+  }
+
+  private syncFloatingPanelState(panelEl: HTMLDivElement | null, panelVisible: boolean, toggleBtn?: HTMLButtonElement): void {
+    if (!panelEl) return;
+
+    const effectiveVisible = this.uiVisible && panelVisible;
+    panelEl.classList.toggle('is-visible', panelVisible);
+    panelEl.style.display = effectiveVisible ? '' : 'none';
+    panelEl.setAttribute('aria-hidden', effectiveVisible ? 'false' : 'true');
+
+    if (effectiveVisible) {
+      panelEl.removeAttribute('inert');
+      return;
     }
-    if (this.analysisModalEl) {
-      this.analysisModalEl.style.display = this.uiVisible && this.analysisVisible ? '' : 'none';
+
+    panelEl.setAttribute('inert', '');
+    const activeEl = document.activeElement;
+    if (!(activeEl instanceof HTMLElement) || !panelEl.contains(activeEl)) {
+      return;
     }
+
+    if (this.uiVisible && toggleBtn) {
+      toggleBtn.focus();
+      return;
+    }
+
+    activeEl.blur();
   }
 
   private toggleFullscreen() {
