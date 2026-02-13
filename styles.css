@@ -131,8 +131,8 @@
   border-radius: 12px;
   backdrop-filter: blur(14px);
   background: var(--hyper-toolbar-bg);
-  border: 1px solid var(--hyper-toolbar-border);
-  box-shadow: var(--hyper-surface-shadow);
+  border: none;
+  box-shadow: none;
   pointer-events: auto;
   color: var(--hyper-toolbar-text);
 }
@@ -178,7 +178,8 @@
 }
 
 .hyper-toolbar span {
-  font-weight: 600;
+  font-weight: 400;
+  font-size: 12px;
   letter-spacing: 0.02em;
   color: var(--hyper-toolbar-text);
 }
