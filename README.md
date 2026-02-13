@@ -7,7 +7,7 @@ Explore your Obsidian knowledge graph in four dimensions. This plugin renders yo
 - **4D graph visualization** -- notes are positioned in four-dimensional space and projected to 3D/2D in real time via WebGL
 - **Force-directed layout** -- configurable repel, center, link, and distance forces shape the graph organically
 - **Color themes** -- multiple built-in palettes (neon, heat, etc.) with per-node color rules based on tags, paths, or filenames
-- **Graph insights** -- analysis modal showing cluster statistics and connectivity metrics
+- **Graph insights** -- analysis modal with cluster diagnostics, plain-language explanations, and note actions
 - **Viewport controls** -- zoom, rotation, and 4D camera manipulation
 - **Active file tracking** -- highlights the currently open note in the graph
 - **Configurable** -- all settings accessible from an in-view config panel (forces, link visibility, node size, color rules)

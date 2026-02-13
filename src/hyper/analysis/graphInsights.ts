@@ -347,6 +347,7 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
   const bridges = findBridges(adjacency);
   const triangles = findTriangles(adjacency, adjacencySets);
   const suggestions = suggestConnections(adjacency, adjacencySets);
+  const disconnectedComponents = components.slice(1);
 
   const overview: GraphOverview = {
     nodeCount,
@@ -356,16 +357,19 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
     componentCount: components.length,
   };
 
-  const componentItems: GraphHighlight[] = components
+  const componentItems: GraphHighlight[] = disconnectedComponents
     .filter((nodes) => nodes.length > 0)
     .map((nodes, index) => {
       const nodeSet = new Set(nodes);
       const componentEdges = gatherEdgesWithin(meta, nodeSet);
+      const context = describeTags(meta, nodes) || describeNodes(meta, nodes);
       return {
         id: `component-${index + 1}`,
         type: 'components',
-        label: `Component ${index + 1} · ${nodes.length} nodes`,
-        description: describeTags(meta, nodes) || describeNodes(meta, nodes),
+        label: `Island ${index + 1} · ${nodes.length} notes`,
+        description: context
+          ? `No path to the main graph. ${context}`
+          : 'No path to the main graph.',
         nodes,
         edges: componentEdges,
         score: nodes.length,
@@ -383,7 +387,7 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
       return {
         id: `community-${index + 1}`,
         type: 'communities',
-        label: `Community ${index + 1} · ${nodes.length} nodes`,
+        label: `Neighborhood ${index + 1} · ${nodes.length} notes`,
         description: describeTags(meta, nodes) || describeNodes(meta, nodes),
         nodes,
         edges: intraEdges,
@@ -398,8 +402,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
       return {
         id: `bridge-${index + 1}`,
         type: 'bridges',
-        label: `Bridge · ${labels[0]} ↔ ${labels[1]}`,
-        description: 'Removing this link splits the surrounding cluster.',
+        label: `Critical Link · ${labels[0]} ↔ ${labels[1]}`,
+        description: 'If this link breaks, the local network splits.',
         nodes: [a, b],
         edges: edgeIndex !== undefined ? [edgeIndex] : undefined,
         score: 1,
@@ -419,8 +423,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
     return {
       id: `loop-${index + 1}`,
       type: 'loops',
-      label: `Loop · ${describeNodes(meta, nodes)}`,
-      description: 'Three-note feedback loop.',
+      label: `Triad · ${describeNodes(meta, nodes)}`,
+      description: 'A 3-note mini-cluster where each note links with the others.',
       nodes,
       edges: edgeIndices,
       score: nodes.length,
@@ -436,8 +440,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
     return {
       id: `suggestion-${index + 1}`,
       type: 'suggestions',
-      label: `Connect ${labelA} ↔ ${labelB}`,
-      description: `Shared neighbors: ${formatList(commonLabels)}`,
+      label: `Possible Link · ${labelA} ↔ ${labelB}`,
+      description: `Shared context: ${formatList(commonLabels)}`,
       nodes: [a, b, ...suggestion.commonNeighbors],
       edges: undefined,
       score: Number(suggestion.score.toFixed(3)),
@@ -446,11 +450,11 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
 
   const groups: InsightGroup[] = [];
 
-  if (componentItems.length > 1) {
+  if (componentItems.length > 0) {
     groups.push({
       key: 'components',
-      title: 'Disconnected Clusters',
-      description: 'Notes that do not connect to the main vault graph.',
+      title: 'Disconnected Islands',
+      description: 'Small note groups not connected to your largest graph region.',
       items: componentItems,
     });
   }
@@ -458,8 +462,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
   if (communityItems.length > 0) {
     groups.push({
       key: 'communities',
-      title: 'Communities',
-      description: 'Dense neighborhoods discovered via label propagation.',
+      title: 'Topic Neighborhoods',
+      description: 'Dense pockets of notes that strongly reference each other.',
       items: communityItems,
     });
   }
@@ -467,8 +471,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
   if (bridgeItems.length > 0) {
     groups.push({
       key: 'bridges',
-      title: 'Bridging Links',
-      description: 'Edges whose removal would isolate clusters.',
+      title: 'Critical Connectors',
+      description: 'Single links carrying most of the traffic between regions.',
       items: bridgeItems,
     });
   }
@@ -476,8 +480,8 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
   if (loopItems.length > 0) {
     groups.push({
       key: 'loops',
-      title: 'Feedback Loops',
-      description: 'Triangular loops often reveal tightly-knit ideas.',
+      title: 'Tight Triads',
+      description: '3-note structures that often indicate focused conceptual pockets.',
       items: loopItems,
     });
   }
@@ -486,7 +490,7 @@ export function analyzeGraph(meta: GraphMeta | null | undefined): GraphInsights 
     groups.push({
       key: 'suggestions',
       title: 'Potential Connections',
-      description: 'Pairs of notes that share neighbors but lack a direct link.',
+      description: 'Note pairs with overlapping context but no direct link yet.',
       items: suggestionItems,
     });
   }

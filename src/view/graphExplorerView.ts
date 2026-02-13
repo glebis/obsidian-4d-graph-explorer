@@ -6,14 +6,20 @@ import { OBJECTS, getObjectByName, getNarrativeGraphObject, getNarrativeGraphSam
 import { composeRotation, type RotationAngles, type Vec4 } from '../hyper/core/math4d';
 import { getTheme, themeList } from '../hyper/render/palette';
 import { buildVaultGraph, type VaultGraphOptions } from '../data/vaultGraph';
-import type { GraphDataPayload } from '../hyper/core/graph';
+import type { GraphDataPayload, GraphMeta } from '../hyper/core/graph';
 import { analyzeGraph, type GraphHighlight, type GraphInsights } from '../hyper/analysis/graphInsights';
 import { pickVisibleLabels, pushCandidateToPool, type LabelCandidate } from './labelSelection';
 import { getLabelPerformanceProfile } from './labelPerformanceProfile';
 import { getRenderPerformanceProfile } from './renderPerformanceProfile';
 import { visualSettingRefreshOptions, type VisualSettingAction } from '../settings/visualSettingPolicy';
 import type GraphExplorerPlugin from '../main';
-import type { GraphExplorerSettings, ColorRule, ColorRuleType } from '../main';
+import type {
+  GraphExplorerPreset,
+  GraphExplorerPresetSettings,
+  GraphExplorerSettings,
+  ColorRule,
+  ColorRuleType,
+} from '../main';
 
 export const HYPER_VIEW_TYPE = 'obsidian-4d-graph-explorer';
 
@@ -137,6 +143,68 @@ const CAMERA_PRESETS: CameraPreset[] = [
   },
 ];
 
+const PRESET_SHORTCUT_LABEL = 'Ctrl/Cmd+Shift+[ or ] · Alt+Arrow';
+
+const BUILTIN_PRESET_BASE: GraphExplorerPresetSettings = {
+  repelForce: 0,
+  centerForce: 0,
+  linkForce: 0,
+  linkDistance: 1.6,
+  nodeSizeMultiplier: 1,
+  showLinks: true,
+  autoPerformanceMode: true,
+  labelRankingMode: 'hybrid',
+  labelFontScaling: 'proportional',
+  labelScaleSource: 'hybrid',
+  labelMinFontSize: 11,
+  labelMaxFontSize: 22,
+  labelDensity: 1,
+  labelPinnedContext: true,
+  labelPinnedImportantCount: 6,
+  labelShowChrome: false,
+  labelShowEmoji: false,
+  showOnlyExistingFiles: true,
+  colorRules: [],
+  theme: 'neon',
+  labelFont: 'default',
+};
+
+const BUILTIN_PRESET_DEFINITIONS: Array<{ name: string; settings: Partial<GraphExplorerPresetSettings> }> = [
+  { name: 'Balanced Default', settings: {} },
+  { name: 'Tight Constellation', settings: { repelForce: 0.4, centerForce: 0.18, linkForce: 1.1, linkDistance: 1.1, theme: 'neon' } },
+  { name: 'Loose Nebula', settings: { repelForce: 3.8, centerForce: 0.03, linkForce: 0.18, linkDistance: 3.2, theme: 'pastel' } },
+  { name: 'Long Arcs', settings: { repelForce: 1.6, centerForce: 0.06, linkForce: 0.45, linkDistance: 4.4, theme: 'heat' } },
+  { name: 'Dense Core', settings: { repelForce: 0.15, centerForce: 0.46, linkForce: 1.8, linkDistance: 0.9, nodeSizeMultiplier: 1.1, theme: 'mono' } },
+  { name: 'Label Spotlight', settings: { labelDensity: 1.7, labelMinFontSize: 13, labelMaxFontSize: 30, labelPinnedImportantCount: 12, labelShowChrome: true } },
+  { name: 'Minimal Labels', settings: { labelDensity: 0.72, labelMinFontSize: 10, labelMaxFontSize: 15, labelPinnedImportantCount: 2, labelPinnedContext: false } },
+  { name: 'Emoji Atlas', settings: { labelShowEmoji: true, labelShowChrome: true, labelDensity: 1.25, labelMinFontSize: 12, labelMaxFontSize: 24 } },
+  { name: 'Mono Focus', settings: { theme: 'mono', showLinks: true, nodeSizeMultiplier: 0.92, labelShowChrome: false } },
+  { name: 'Daylight Readable', settings: { theme: 'daylight', labelFont: 'source-serif-4', labelShowChrome: true, labelDensity: 1.15 } },
+  { name: 'Pastel Calm', settings: { theme: 'pastel', nodeSizeMultiplier: 1.08, linkDistance: 2.2, labelFont: 'literata' } },
+  { name: 'Heat Map', settings: { theme: 'heat', labelScaleSource: 'importance', labelRankingMode: 'importance', nodeSizeMultiplier: 1.18 } },
+  { name: 'Performance Edge', settings: { autoPerformanceMode: true, showLinks: false, labelDensity: 0.7, labelMinFontSize: 10, labelMaxFontSize: 14, labelPinnedContext: false } },
+  { name: 'Big Nodes', settings: { nodeSizeMultiplier: 2.2, showLinks: false, labelDensity: 0.85, theme: 'daylight' } },
+  { name: 'Fine Mesh', settings: { nodeSizeMultiplier: 0.58, showLinks: true, linkForce: 1.65, linkDistance: 0.82, theme: 'neon' } },
+  { name: 'Local Context', settings: { labelPinnedContext: true, labelPinnedImportantCount: 14, labelDensity: 1.35, labelScaleSource: 'depth' } },
+  { name: 'Discovery Sweep', settings: { labelRankingMode: 'hybrid', labelScaleSource: 'hybrid', labelDensity: 1.45, showOnlyExistingFiles: false, theme: 'heat' } },
+  { name: 'Quiet Presentation', settings: { showLinks: false, labelShowChrome: false, labelShowEmoji: false, theme: 'mono', autoPerformanceMode: false } },
+  { name: 'Contrast Study', settings: { theme: 'neon', labelFont: 'jetbrains-mono', labelShowChrome: true, labelDensity: 1.05, nodeSizeMultiplier: 1.25 } },
+  { name: 'Archive Overview', settings: { showOnlyExistingFiles: false, showLinks: true, repelForce: 2.8, centerForce: 0.08, linkForce: 0.36, linkDistance: 2.9, theme: 'daylight' } },
+];
+
+function cloneColorRules(colorRules: ColorRule[]): ColorRule[] {
+  return colorRules.map((rule) => ({ ...rule }));
+}
+
+const BUILTIN_PRESETS: GraphExplorerPreset[] = BUILTIN_PRESET_DEFINITIONS.map((preset) => ({
+  name: preset.name,
+  settings: {
+    ...BUILTIN_PRESET_BASE,
+    ...preset.settings,
+    colorRules: cloneColorRules(preset.settings.colorRules ?? BUILTIN_PRESET_BASE.colorRules),
+  },
+}));
+
 function createOption(el: HTMLSelectElement, { id, label, title }: { id: string; label: string; title?: string }) {
   const option = document.createElement('option');
   option.value = id;
@@ -178,6 +246,11 @@ export class GraphExplorerView extends ItemView {
   private statusEl!: HTMLSpanElement;
   private configPanelEl!: HTMLDivElement;
   private configVisible = false;
+  private presetSelectEl!: HTMLSelectElement;
+  private presetPrevBtn!: HTMLButtonElement;
+  private presetNextBtn!: HTMLButtonElement;
+  private presetExportTextEl!: HTMLTextAreaElement;
+  private presetImportTextEl!: HTMLTextAreaElement;
   private datasetSelectEl!: HTMLSelectElement;
   private themeSelectEl!: HTMLSelectElement;
   private fontSelectEl!: HTMLSelectElement;
@@ -259,6 +332,7 @@ export class GraphExplorerView extends ItemView {
   private uiVisible = true;
   private isFullscreen = false;
   private fullscreenBtn!: HTMLButtonElement;
+  private statusClearTimeout: number | null = null;
   private lastLabelRenderAt = 0;
   private labelsDirty = false;
   private renderRequested = true;
@@ -270,6 +344,9 @@ export class GraphExplorerView extends ItemView {
   private cachedTopImportantCount = -1;
   private readonly fullscreenChangeHandler = () => {
     this.updateFullscreenButton();
+  };
+  private readonly keydownHandler = (event: KeyboardEvent) => {
+    this.handlePresetShortcut(event);
   };
 
   private syncRendererPerformanceProfile(): void {
@@ -373,6 +450,8 @@ export class GraphExplorerView extends ItemView {
     this.updateTheme();
     this.updateLabelPresentation();
     this.applyLabelFont();
+    this.refreshPresetControls();
+    this.updatePresetExportText();
     this.requestRender();
   }
 
@@ -514,13 +593,11 @@ export class GraphExplorerView extends ItemView {
       this.showStatus(`Slice mode: ${this.state.slice.mode}`);
     }, 'Cycle through projection / hyperplane / shadow views');
 
-    this.analysisToggleBtn = createIconButton('git-branch', () => {
+    this.analysisToggleBtn = createButton('Insights', () => {
       this.toggleConfigPanel(false);
       this.toggleAnalysisModal();
-    }, {
-      title: 'Open graph insights',
-      ariaLabel: 'Open graph insights panel',
-    });
+    }, 'Open graph insights and actions');
+    this.analysisToggleBtn.setAttribute('aria-label', 'Open graph insights and actions panel');
 
     this.configToggleBtn = createIconButton('settings', () => {
       this.toggleAnalysisModal(false);
@@ -591,6 +668,7 @@ export class GraphExplorerView extends ItemView {
     this.toolbarEl.appendChild(this.fullscreenBtn);
 
     document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.addEventListener('keydown', this.keydownHandler);
 
     this.canvasEl.addEventListener('pointerdown', (e) => {
       this.pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -611,21 +689,399 @@ export class GraphExplorerView extends ItemView {
       window.clearTimeout(this.localDatasetReloadDebounce);
       this.localDatasetReloadDebounce = null;
     }
+    if (this.statusClearTimeout !== null) {
+      window.clearTimeout(this.statusClearTimeout);
+      this.statusClearTimeout = null;
+    }
     document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    document.removeEventListener('keydown', this.keydownHandler);
     this.toggleConfigPanel(false);
     this.toggleAnalysisModal(false);
     this.controls?.dispose();
     this.renderer?.dispose();
   }
 
-  private showStatus(message: string) {
-    if (this.statusEl) {
-      this.statusEl.textContent = message;
+  private showStatus(message: string, options: { persistent?: boolean; timeoutMs?: number } = {}): void {
+    if (!this.statusEl) return;
+
+    if (this.statusClearTimeout !== null) {
+      window.clearTimeout(this.statusClearTimeout);
+      this.statusClearTimeout = null;
     }
+
+    const text = message.trim();
+    if (!text) {
+      this.statusEl.textContent = '';
+      this.statusEl.style.display = 'none';
+      return;
+    }
+
+    this.statusEl.style.display = '';
+    this.statusEl.textContent = text;
+    if (options.persistent) return;
+
+    const timeoutMs = Math.max(400, options.timeoutMs ?? 1800);
+    this.statusClearTimeout = window.setTimeout(() => {
+      this.statusClearTimeout = null;
+      if (!this.statusEl) return;
+      this.statusEl.textContent = '';
+      this.statusEl.style.display = 'none';
+    }, timeoutMs);
   }
 
   private notifyVisualSettingChange(action: VisualSettingAction): void {
     void this.plugin.handleVisualSettingChange(visualSettingRefreshOptions(action));
+  }
+
+  private normalizeNumber(value: unknown, fallback: number, min: number, max: number): number {
+    const resolved = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    return Math.min(max, Math.max(min, resolved));
+  }
+
+  private normalizeBoolean(value: unknown, fallback: boolean): boolean {
+    if (typeof value === 'boolean') return value;
+    return fallback;
+  }
+
+  private normalizeColorRules(value: unknown): ColorRule[] {
+    if (!Array.isArray(value)) return [];
+    const now = Date.now();
+    return value
+      .map((item, index) => {
+        if (!item || typeof item !== 'object') return null;
+        const rule = item as Partial<ColorRule>;
+        const id = typeof rule.id === 'string' && rule.id.trim().length > 0
+          ? rule.id.trim()
+          : `rule-${now}-${index}`;
+        const type: ColorRuleType = rule.type === 'tag' || rule.type === 'path' || rule.type === 'filename'
+          ? rule.type
+          : 'tag';
+        return {
+          id,
+          type,
+          pattern: typeof rule.pattern === 'string' ? rule.pattern : '',
+          color: typeof rule.color === 'string' ? rule.color : '#ff6b6b',
+          enabled: typeof rule.enabled === 'boolean' ? rule.enabled : true,
+        };
+      })
+      .filter((rule): rule is ColorRule => rule !== null);
+  }
+
+  private normalizePresetSettings(input: Partial<GraphExplorerPresetSettings> | null | undefined): GraphExplorerPresetSettings {
+    const source = input ?? {};
+    const themeOptions = new Set(this.themeCycle.map((theme) => theme.id));
+    const fontOptions = new Set(Object.keys(GraphExplorerView.FONT_STACKS));
+    const labelRankingMode = source.labelRankingMode === 'depth' || source.labelRankingMode === 'importance' || source.labelRankingMode === 'hybrid'
+      ? source.labelRankingMode
+      : BUILTIN_PRESET_BASE.labelRankingMode;
+    const labelFontScaling = source.labelFontScaling === 'fixed' || source.labelFontScaling === 'proportional'
+      ? source.labelFontScaling
+      : BUILTIN_PRESET_BASE.labelFontScaling;
+    const labelScaleSource = source.labelScaleSource === 'depth' || source.labelScaleSource === 'importance' || source.labelScaleSource === 'hybrid'
+      ? source.labelScaleSource
+      : BUILTIN_PRESET_BASE.labelScaleSource;
+    const minFont = this.normalizeNumber(source.labelMinFontSize, BUILTIN_PRESET_BASE.labelMinFontSize, 8, 24);
+    const maxFont = this.normalizeNumber(source.labelMaxFontSize, BUILTIN_PRESET_BASE.labelMaxFontSize, minFont + 1, 40);
+
+    return {
+      repelForce: this.normalizeNumber(source.repelForce, BUILTIN_PRESET_BASE.repelForce, 0, 10),
+      centerForce: this.normalizeNumber(source.centerForce, BUILTIN_PRESET_BASE.centerForce, 0, 1.5),
+      linkForce: this.normalizeNumber(source.linkForce, BUILTIN_PRESET_BASE.linkForce, 0, 4),
+      linkDistance: this.normalizeNumber(source.linkDistance, BUILTIN_PRESET_BASE.linkDistance, 0.2, 6),
+      nodeSizeMultiplier: this.normalizeNumber(source.nodeSizeMultiplier, BUILTIN_PRESET_BASE.nodeSizeMultiplier, 0.4, 3),
+      showLinks: this.normalizeBoolean(source.showLinks, BUILTIN_PRESET_BASE.showLinks),
+      autoPerformanceMode: this.normalizeBoolean(source.autoPerformanceMode, BUILTIN_PRESET_BASE.autoPerformanceMode),
+      labelRankingMode,
+      labelFontScaling,
+      labelScaleSource,
+      labelMinFontSize: minFont,
+      labelMaxFontSize: maxFont,
+      labelDensity: this.normalizeNumber(source.labelDensity, BUILTIN_PRESET_BASE.labelDensity, 0.6, 2),
+      labelPinnedContext: this.normalizeBoolean(source.labelPinnedContext, BUILTIN_PRESET_BASE.labelPinnedContext),
+      labelPinnedImportantCount: Math.round(this.normalizeNumber(
+        source.labelPinnedImportantCount,
+        BUILTIN_PRESET_BASE.labelPinnedImportantCount,
+        0,
+        20,
+      )),
+      labelShowChrome: this.normalizeBoolean(source.labelShowChrome, BUILTIN_PRESET_BASE.labelShowChrome),
+      labelShowEmoji: this.normalizeBoolean(source.labelShowEmoji, BUILTIN_PRESET_BASE.labelShowEmoji),
+      showOnlyExistingFiles: this.normalizeBoolean(source.showOnlyExistingFiles, BUILTIN_PRESET_BASE.showOnlyExistingFiles),
+      colorRules: this.normalizeColorRules(source.colorRules),
+      theme: typeof source.theme === 'string' && themeOptions.has(source.theme) ? source.theme : BUILTIN_PRESET_BASE.theme,
+      labelFont: typeof source.labelFont === 'string' && fontOptions.has(source.labelFont) ? source.labelFont : BUILTIN_PRESET_BASE.labelFont,
+    };
+  }
+
+  private getCurrentPresetSettings(): GraphExplorerPresetSettings {
+    return this.normalizePresetSettings({
+      repelForce: this.settings.repelForce,
+      centerForce: this.settings.centerForce,
+      linkForce: this.settings.linkForce,
+      linkDistance: this.settings.linkDistance,
+      nodeSizeMultiplier: this.settings.nodeSizeMultiplier,
+      showLinks: this.settings.showLinks,
+      autoPerformanceMode: this.settings.autoPerformanceMode,
+      labelRankingMode: this.settings.labelRankingMode,
+      labelFontScaling: this.settings.labelFontScaling,
+      labelScaleSource: this.settings.labelScaleSource,
+      labelMinFontSize: this.settings.labelMinFontSize,
+      labelMaxFontSize: this.settings.labelMaxFontSize,
+      labelDensity: this.settings.labelDensity,
+      labelPinnedContext: this.settings.labelPinnedContext,
+      labelPinnedImportantCount: this.settings.labelPinnedImportantCount,
+      labelShowChrome: this.settings.labelShowChrome,
+      labelShowEmoji: this.settings.labelShowEmoji,
+      showOnlyExistingFiles: this.settings.showOnlyExistingFiles,
+      colorRules: cloneColorRules(this.settings.colorRules),
+      theme: this.settings.theme,
+      labelFont: this.settings.labelFont,
+    });
+  }
+
+  private applyPresetSettingsToCurrent(settings: GraphExplorerPresetSettings): void {
+    const normalized = this.normalizePresetSettings(settings);
+    Object.assign(this.settings, normalized);
+    this.settings.colorRules = cloneColorRules(normalized.colorRules);
+  }
+
+  private normalizePreset(preset: GraphExplorerPreset): GraphExplorerPreset | null {
+    if (!preset || typeof preset.name !== 'string') return null;
+    const name = preset.name.trim();
+    if (!name) return null;
+    return {
+      name,
+      settings: this.normalizePresetSettings(preset.settings),
+    };
+  }
+
+  private getPresetCatalog(): GraphExplorerPreset[] {
+    const builtins = BUILTIN_PRESETS.map((preset) => ({
+      name: preset.name,
+      settings: this.normalizePresetSettings(preset.settings),
+    }));
+    const customSource = Array.isArray(this.settings.customPresets) ? this.settings.customPresets : [];
+    const custom = customSource
+      .map((preset) => this.normalizePreset(preset))
+      .filter((preset): preset is GraphExplorerPreset => preset !== null);
+    const customByName = new Map(custom.map((preset) => [preset.name, preset]));
+    const resolved: GraphExplorerPreset[] = [];
+    const seen = new Set<string>();
+
+    builtins.forEach((builtin) => {
+      const override = customByName.get(builtin.name);
+      resolved.push(override ?? builtin);
+      seen.add(builtin.name);
+    });
+    custom.forEach((preset) => {
+      if (seen.has(preset.name)) return;
+      resolved.push(preset);
+      seen.add(preset.name);
+    });
+    return resolved;
+  }
+
+  private refreshPresetControls(): void {
+    if (!this.presetSelectEl) return;
+    const presets = this.getPresetCatalog();
+    const previousValue = this.presetSelectEl.value;
+    while (this.presetSelectEl.firstChild) {
+      this.presetSelectEl.removeChild(this.presetSelectEl.firstChild);
+    }
+    presets.forEach((preset) => {
+      createOption(this.presetSelectEl, { id: preset.name, label: preset.name });
+    });
+
+    const preferred = this.settings.activePresetName.trim();
+    const selectedName = presets.some((preset) => preset.name === preferred)
+      ? preferred
+      : (presets.some((preset) => preset.name === previousValue) ? previousValue : (presets[0]?.name ?? ''));
+    if (selectedName) {
+      this.presetSelectEl.value = selectedName;
+    }
+    const disableNav = presets.length <= 1;
+    if (this.presetPrevBtn) this.presetPrevBtn.disabled = disableNav;
+    if (this.presetNextBtn) this.presetNextBtn.disabled = disableNav;
+  }
+
+  private updatePresetExportText(): void {
+    if (!this.presetExportTextEl) return;
+    const name = this.settings.activePresetName.trim() || this.presetSelectEl?.value || 'Custom preset';
+    const payload: GraphExplorerPreset = {
+      name,
+      settings: this.getCurrentPresetSettings(),
+    };
+    this.presetExportTextEl.value = JSON.stringify(payload, null, 2);
+  }
+
+  private upsertCustomPreset(preset: GraphExplorerPreset): void {
+    const normalized = this.normalizePreset(preset);
+    if (!normalized) return;
+    const next = Array.isArray(this.settings.customPresets) ? [...this.settings.customPresets] : [];
+    const index = next.findIndex((item) => item.name === normalized.name);
+    if (index >= 0) {
+      next[index] = normalized;
+    } else {
+      next.push(normalized);
+    }
+    this.settings.customPresets = next;
+  }
+
+  private applyPresetByName(name: string, options: { announce?: boolean } = {}): void {
+    const preset = this.getPresetCatalog().find((item) => item.name === name);
+    if (!preset) {
+      new Notice(`Preset not found: ${name}`);
+      return;
+    }
+    this.applyPresetSettingsToCurrent(preset.settings);
+    this.settings.activePresetName = preset.name;
+    this.markLabelsDirty(true);
+    this.applySettings(this.settings);
+    this.refreshPresetControls();
+    this.updatePresetExportText();
+    if (options.announce !== false) {
+      this.showStatus(`Preset: ${preset.name}`);
+    }
+    void this.plugin.handleBulkSettingChange({ reloadGraph: true });
+  }
+
+  private cyclePreset(step: number): void {
+    const presets = this.getPresetCatalog();
+    if (presets.length === 0) return;
+    const currentName = this.presetSelectEl?.value || this.settings.activePresetName || presets[0].name;
+    const currentIndex = Math.max(0, presets.findIndex((preset) => preset.name === currentName));
+    const nextIndex = (currentIndex + step + presets.length) % presets.length;
+    this.applyPresetByName(presets[nextIndex].name);
+  }
+
+  private saveCurrentPreset(): void {
+    const currentName = this.presetSelectEl?.value || this.settings.activePresetName || 'Custom preset';
+    const input = window.prompt('Save preset name', currentName);
+    if (input === null) return;
+    const name = input.trim();
+    if (!name) {
+      new Notice('Preset name cannot be empty');
+      return;
+    }
+    const settings = this.getCurrentPresetSettings();
+    this.upsertCustomPreset({ name, settings });
+    this.settings.activePresetName = name;
+    this.refreshPresetControls();
+    this.updatePresetExportText();
+    void this.plugin.saveSettings();
+    this.showStatus(`Saved preset: ${name}`);
+  }
+
+  private makePresetFilename(name: string): string {
+    const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'preset';
+    return `4d-graph-${safeName}.json`;
+  }
+
+  private downloadCurrentPreset(): void {
+    const text = this.presetExportTextEl?.value?.trim();
+    if (!text) {
+      this.updatePresetExportText();
+    }
+    const payload = this.presetExportTextEl?.value ?? '';
+    if (!payload) return;
+    const name = this.settings.activePresetName.trim() || this.presetSelectEl?.value || 'preset';
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = this.makePresetFilename(name);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  private copyPresetExportText(): void {
+    if (!this.presetExportTextEl) return;
+    const value = this.presetExportTextEl.value;
+    if (!value) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(value)
+        .then(() => this.showStatus('Preset JSON copied'))
+        .catch(() => {
+          this.presetExportTextEl.select();
+          document.execCommand('copy');
+          this.showStatus('Preset JSON copied');
+        });
+      return;
+    }
+    this.presetExportTextEl.select();
+    document.execCommand('copy');
+    this.showStatus('Preset JSON copied');
+  }
+
+  private importPresetFromText(): void {
+    if (!this.presetImportTextEl) return;
+    const text = this.presetImportTextEl.value.trim();
+    if (!text) {
+      new Notice('Paste preset JSON first');
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      new Notice('Preset import failed: invalid JSON');
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      new Notice('Preset import failed: JSON must be an object');
+      return;
+    }
+    const objectValue = parsed as Record<string, unknown>;
+    const defaultName = this.presetSelectEl?.value || this.settings.activePresetName || 'Imported preset';
+    const importedName = typeof objectValue.name === 'string' && objectValue.name.trim()
+      ? objectValue.name.trim()
+      : defaultName;
+    const settingsInput = (objectValue.settings && typeof objectValue.settings === 'object' && !Array.isArray(objectValue.settings))
+      ? objectValue.settings as Partial<GraphExplorerPresetSettings>
+      : objectValue as Partial<GraphExplorerPresetSettings>;
+    const normalizedSettings = this.normalizePresetSettings(settingsInput);
+    this.upsertCustomPreset({ name: importedName, settings: normalizedSettings });
+    this.applyPresetSettingsToCurrent(normalizedSettings);
+    this.settings.activePresetName = importedName;
+    this.markLabelsDirty(true);
+    this.applySettings(this.settings);
+    this.refreshPresetControls();
+    this.updatePresetExportText();
+    this.showStatus(`Imported preset: ${importedName}`);
+    void this.plugin.handleBulkSettingChange({ reloadGraph: true });
+  }
+
+  private enableTextareaSelectAll(textarea: HTMLTextAreaElement): void {
+    const selectAll = () => {
+      if (!textarea.value) return;
+      textarea.select();
+    };
+    textarea.addEventListener('focus', selectAll);
+    textarea.addEventListener('click', selectAll);
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
+  private handlePresetShortcut(event: KeyboardEvent): void {
+    if (!this.isEditableTarget(event.target)) {
+      const activeView = this.app.workspace.getActiveViewOfType(GraphExplorerView);
+      if (activeView !== this) return;
+      const hasMod = event.metaKey || event.ctrlKey;
+      const prev = (hasMod && event.shiftKey && (event.code === 'BracketLeft' || event.code === 'ArrowLeft'))
+        || (event.altKey && event.code === 'ArrowLeft');
+      const next = (hasMod && event.shiftKey && (event.code === 'BracketRight' || event.code === 'ArrowRight'))
+        || (event.altKey && event.code === 'ArrowRight');
+      if (!prev && !next) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.cyclePreset(next ? 1 : -1);
+    }
   }
 
   private buildConfigPanel() {
@@ -643,6 +1099,88 @@ export class GraphExplorerView extends ItemView {
 
     const body = this.configPanelEl.createDiv({ cls: 'hyper-config-body' });
     const uniqueSuffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const presetSectionHeader = body.createDiv({ cls: 'hyper-config-section-header' });
+    presetSectionHeader.createDiv({ cls: 'hyper-config-section-title', text: 'Presets' });
+
+    const presetToolsDetails = presetSectionHeader.createEl('details', { cls: 'hyper-preset-tools' });
+    const presetToolsSummary = presetToolsDetails.createEl('summary', { text: 'Import / Export' });
+    presetToolsSummary.setAttribute('aria-label', 'Toggle preset import and export menu');
+    const presetToolsBody = presetToolsDetails.createDiv({ cls: 'hyper-preset-tools-body' });
+
+    const presetRow = body.createDiv({ cls: 'hyper-config-row' });
+    const presetId = `hyper-preset-${uniqueSuffix}`;
+    const presetControl = presetRow.createDiv({ cls: 'hyper-preset-nav' });
+    this.presetPrevBtn = createIconButton('chevron-left', () => {
+      this.cyclePreset(-1);
+    }, {
+      title: `Previous preset (${PRESET_SHORTCUT_LABEL})`,
+      ariaLabel: 'Previous preset',
+    });
+    this.presetNextBtn = createIconButton('chevron-right', () => {
+      this.cyclePreset(1);
+    }, {
+      title: `Next preset (${PRESET_SHORTCUT_LABEL})`,
+      ariaLabel: 'Next preset',
+    });
+    this.presetSelectEl = presetControl.createEl('select', { attr: { id: presetId, 'aria-label': 'Preset' } });
+    this.presetSelectEl.addEventListener('change', () => {
+      const value = this.presetSelectEl.value;
+      if (!value) return;
+      this.applyPresetByName(value, { announce: false });
+    });
+    presetControl.appendChild(this.presetPrevBtn);
+    presetControl.appendChild(this.presetNextBtn);
+
+    const presetSaveRow = body.createDiv({ cls: 'hyper-config-row' });
+    const presetSaveBtn = createButton('Save preset', () => {
+      this.saveCurrentPreset();
+    }, 'Save current settings to preset library');
+    presetSaveBtn.classList.add('hyper-preset-save-btn');
+    presetSaveRow.appendChild(presetSaveBtn);
+
+    const presetExportRow = presetToolsBody.createDiv({ cls: 'hyper-config-row' });
+    presetExportRow.createEl('label', { text: 'Export preset text' });
+    this.presetExportTextEl = presetExportRow.createEl('textarea', {
+      cls: 'hyper-preset-textarea',
+      attr: {
+        rows: '6',
+        readonly: 'true',
+      },
+    });
+    this.enableTextareaSelectAll(this.presetExportTextEl);
+    const presetExportActions = presetExportRow.createDiv({ cls: 'hyper-preset-actions' });
+    const presetCopyBtn = createButton('Copy', () => {
+      this.copyPresetExportText();
+    }, 'Copy preset JSON to clipboard');
+    const presetDownloadBtn = createButton('Download JSON', () => {
+      this.downloadCurrentPreset();
+    }, 'Download preset JSON');
+    presetExportActions.appendChild(presetCopyBtn);
+    presetExportActions.appendChild(presetDownloadBtn);
+
+    const presetImportRow = presetToolsBody.createDiv({ cls: 'hyper-config-row' });
+    presetImportRow.createEl('label', { text: 'Import preset text' });
+    this.presetImportTextEl = presetImportRow.createEl('textarea', {
+      cls: 'hyper-preset-textarea',
+      attr: {
+        rows: '6',
+        placeholder: '{"name":"My Preset","settings":{...}}',
+      },
+    });
+    this.enableTextareaSelectAll(this.presetImportTextEl);
+    const presetImportActions = presetImportRow.createDiv({ cls: 'hyper-preset-actions' });
+    const presetImportBtn = createButton('Import + Apply', () => {
+      this.importPresetFromText();
+    }, 'Import and apply preset JSON');
+    const presetClearBtn = createButton('Clear', () => {
+      this.presetImportTextEl.value = '';
+    }, 'Clear imported preset text');
+    presetImportActions.appendChild(presetImportBtn);
+    presetImportActions.appendChild(presetClearBtn);
+
+    this.refreshPresetControls();
+    this.updatePresetExportText();
 
     const datasetRow = body.createDiv({ cls: 'hyper-config-row' });
     const datasetId = `hyper-dataset-${uniqueSuffix}`;
@@ -1271,7 +1809,7 @@ export class GraphExplorerView extends ItemView {
     });
 
     const modalHeader = this.analysisModalEl.createDiv({ cls: 'hyper-analysis-modal-header' });
-    modalHeader.createEl('h3', { text: 'Graph Insights' });
+    modalHeader.createEl('h3', { text: 'Graph Insights & Actions' });
     const closeBtn = createIconButton('x', () => {
       this.toggleAnalysisModal(false);
     }, {
@@ -1281,6 +1819,10 @@ export class GraphExplorerView extends ItemView {
     modalHeader.appendChild(closeBtn);
 
     const modalBody = this.analysisModalEl.createDiv({ cls: 'hyper-analysis-modal-body' });
+    modalBody.createEl('p', {
+      cls: 'hyper-analysis-intro',
+      text: 'Inspect graph patterns, highlight them in context, and jump into source notes.',
+    });
     this.analysisContainerEl = modalBody.createDiv({ cls: 'hyper-analysis-panel' });
 
     const header = this.analysisContainerEl.createDiv({ cls: 'hyper-analysis-header' });
@@ -1312,7 +1854,7 @@ export class GraphExplorerView extends ItemView {
 
     if (!this.graphInsights) {
       summaryEl.createEl('p', {
-        text: 'Insights appear once a vault graph is loaded.',
+        text: 'Insights appear after a vault graph is loaded.',
         cls: 'hyper-analysis-empty',
       });
       if (this.clearHighlightBtn) {
@@ -1323,13 +1865,33 @@ export class GraphExplorerView extends ItemView {
 
     const { overview, groups } = this.graphInsights;
     const stats = [
-      { label: 'Nodes', value: overview.nodeCount.toString() },
-      { label: 'Links', value: overview.edgeCount.toString() },
-      { label: 'Avg degree', value: overview.averageDegree.toString() },
-      { label: 'Density', value: overview.density.toString() },
+      {
+        label: 'Notes',
+        value: overview.nodeCount.toString(),
+        help: 'Total notes in the current dataset.',
+      },
+      {
+        label: 'Links',
+        value: overview.edgeCount.toString(),
+        help: 'Direct references currently visible.',
+      },
+      {
+        label: 'Avg links/note',
+        value: overview.averageDegree.toString(),
+        help: 'Higher values usually mean tighter connectivity.',
+      },
+      {
+        label: 'Density',
+        value: `${(overview.density * 100).toFixed(2)}%`,
+        help: 'How close the graph is to fully cross-linked.',
+      },
     ];
     if (overview.componentCount > 1) {
-      stats.push({ label: 'Components', value: overview.componentCount.toString() });
+      stats.push({
+        label: 'Islands',
+        value: (overview.componentCount - 1).toString(),
+        help: 'Disconnected groups outside your largest region.',
+      });
     }
 
     const metricsRow = summaryEl.createDiv({ cls: 'hyper-analysis-metrics' });
@@ -1337,11 +1899,18 @@ export class GraphExplorerView extends ItemView {
       const metricEl = metricsRow.createDiv({ cls: 'hyper-analysis-metric' });
       metricEl.createEl('span', { cls: 'hyper-analysis-metric-label', text: metric.label });
       metricEl.createEl('strong', { text: metric.value });
+      metricEl.createEl('small', { cls: 'hyper-analysis-metric-help', text: metric.help });
+    });
+    summaryEl.createEl('p', {
+      cls: 'hyper-analysis-context',
+      text: overview.componentCount > 1
+        ? `Your graph has ${overview.componentCount - 1} disconnected island${overview.componentCount - 1 === 1 ? '' : 's'}.`
+        : 'Your graph is fully connected as a single network.',
     });
 
     if (groups.length === 0) {
       groupsEl.createEl('p', {
-        text: 'No standout clusters detected yet—try expanding the dataset or adding links.',
+        text: 'No standout structures yet. Try loading more notes or creating more links.',
         cls: 'hyper-analysis-empty',
       });
       this.updateAnalysisSelectionState();
@@ -1363,7 +1932,8 @@ export class GraphExplorerView extends ItemView {
       group.items.slice(0, maxItems).forEach((item) => {
         this.highlightLookup.set(item.id, item);
         const itemEl = list.createDiv({ cls: 'hyper-analysis-item' });
-        const button = itemEl.createEl('button', { text: item.label, cls: 'hyper-analysis-pill' });
+        const itemHeader = itemEl.createDiv({ cls: 'hyper-analysis-item-header' });
+        const button = itemHeader.createEl('button', { text: item.label, cls: 'hyper-analysis-pill' });
         button.type = 'button';
         button.dataset.highlightId = item.id;
         if (item.description) {
@@ -1372,13 +1942,191 @@ export class GraphExplorerView extends ItemView {
         button.addEventListener('click', () => {
           this.handleHighlightClick(item);
         });
+        const scoreText = this.formatInsightScore(item);
+        if (scoreText) {
+          itemHeader.createEl('span', { text: scoreText, cls: 'hyper-analysis-score' });
+        }
         if (item.description) {
           itemEl.createEl('div', { text: item.description, cls: 'hyper-analysis-item-description' });
+        }
+        const actionRow = itemEl.createDiv({ cls: 'hyper-analysis-item-actions' });
+        const highlightBtn = createButton('Highlight', () => {
+          this.handleHighlightClick(item);
+        }, 'Highlight this insight in the graph');
+        highlightBtn.classList.add('hyper-analysis-action-btn');
+        actionRow.appendChild(highlightBtn);
+
+        if (item.nodes.length > 0) {
+          const openBtn = createButton('Open note', () => {
+            void this.openInsightNode(item.nodes[0]);
+          }, 'Open the first note in this insight');
+          openBtn.classList.add('hyper-analysis-action-btn');
+          actionRow.appendChild(openBtn);
+        }
+
+        if (item.type === 'suggestions' && item.nodes.length > 1) {
+          const openBothBtn = createButton('Open both', () => {
+            void this.openInsightPair(item);
+          }, 'Open both notes in this potential connection');
+          openBothBtn.classList.add('hyper-analysis-action-btn');
+          actionRow.appendChild(openBothBtn);
+
+          const linkBtn = createButton('Add link', () => {
+            void this.createConnectionFromSuggestion(item);
+          }, 'Insert a wikilink from the first note to the second note');
+          linkBtn.classList.add('hyper-analysis-action-btn');
+          actionRow.appendChild(linkBtn);
         }
       });
     });
 
     this.updateAnalysisSelectionState();
+  }
+
+  private formatInsightScore(item: GraphHighlight): string | null {
+    if (typeof item.score !== 'number' || !Number.isFinite(item.score)) {
+      return null;
+    }
+    if (item.type === 'communities') {
+      return `Cohesion ${(item.score * 100).toFixed(0)}%`;
+    }
+    if (item.type === 'suggestions') {
+      return `Overlap ${(item.score * 100).toFixed(0)}%`;
+    }
+    if (item.type === 'components') {
+      return `${Math.round(item.score)} notes`;
+    }
+    return null;
+  }
+
+  private getActiveGraphMeta(): GraphMeta | null {
+    const meta = this.activeObject?.meta;
+    if (!meta || meta.type !== 'graph') {
+      return null;
+    }
+    return meta;
+  }
+
+  private resolveNodeFileFromId(nodeId: string): TFile | null {
+    if (!nodeId) {
+      return null;
+    }
+    const direct = this.app.vault.getAbstractFileByPath(nodeId);
+    if (direct instanceof TFile) {
+      return direct;
+    }
+    const resolved = this.app.metadataCache.getFirstLinkpathDest(nodeId, '');
+    return resolved instanceof TFile ? resolved : null;
+  }
+
+  private async openInsightNode(index: number): Promise<void> {
+    const meta = this.getActiveGraphMeta();
+    if (!meta) {
+      return;
+    }
+    const node = meta.nodes[index];
+    if (!node) {
+      return;
+    }
+    const file = this.resolveNodeFileFromId(node.id);
+    if (file) {
+      const leaf = this.app.workspace.getLeaf(false) ?? this.app.workspace.getLeaf(true);
+      if (leaf) {
+        await leaf.openFile(file);
+        return;
+      }
+    }
+    this.app.workspace.openLinkText(node.id, '', false);
+  }
+
+  private async openInsightPair(item: GraphHighlight): Promise<void> {
+    const meta = this.getActiveGraphMeta();
+    if (!meta) {
+      return;
+    }
+    const [sourceIndex, targetIndex] = item.nodes;
+    if (!Number.isInteger(sourceIndex) || !Number.isInteger(targetIndex)) {
+      return;
+    }
+    const sourceNode = meta.nodes[sourceIndex];
+    const targetNode = meta.nodes[targetIndex];
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+
+    const sourceFile = this.resolveNodeFileFromId(sourceNode.id);
+    const targetFile = this.resolveNodeFileFromId(targetNode.id);
+
+    const primaryLeaf = this.app.workspace.getLeaf(false) ?? this.app.workspace.getLeaf(true);
+    if (sourceFile && primaryLeaf) {
+      await primaryLeaf.openFile(sourceFile);
+    } else {
+      this.app.workspace.openLinkText(sourceNode.id, '', false);
+    }
+
+    const secondaryLeaf = this.app.workspace.getLeaf(true) ?? primaryLeaf;
+    if (targetFile && secondaryLeaf) {
+      await secondaryLeaf.openFile(targetFile);
+      return;
+    }
+    this.app.workspace.openLinkText(targetNode.id, '', false);
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private async createConnectionFromSuggestion(item: GraphHighlight): Promise<void> {
+    const meta = this.getActiveGraphMeta();
+    if (!meta || item.type !== 'suggestions') {
+      return;
+    }
+    const [sourceIndex, targetIndex] = item.nodes;
+    if (!Number.isInteger(sourceIndex) || !Number.isInteger(targetIndex)) {
+      return;
+    }
+    const sourceNode = meta.nodes[sourceIndex];
+    const targetNode = meta.nodes[targetIndex];
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+    if (sourceNode.id === targetNode.id) {
+      new Notice('Cannot create a self-link.');
+      return;
+    }
+
+    const sourceFile = this.resolveNodeFileFromId(sourceNode.id);
+    if (!sourceFile) {
+      new Notice('Source note not found. Open it first and add the link manually.');
+      return;
+    }
+
+    const targetFile = this.resolveNodeFileFromId(targetNode.id);
+    const resolvedLinks = this.app.metadataCache.resolvedLinks[sourceFile.path];
+    if (targetFile && resolvedLinks && Number(resolvedLinks[targetFile.path] ?? 0) > 0) {
+      new Notice('These notes are already connected.');
+      return;
+    }
+
+    const linkText = targetFile
+      ? this.app.metadataCache.fileToLinktext(targetFile, sourceFile.path)
+      : targetNode.id.replace(/\.md$/i, '');
+    const safeLinkText = linkText?.trim() || targetNode.id.replace(/\.md$/i, '');
+    const wikiLink = `[[${safeLinkText}]]`;
+    const content = await this.app.vault.cachedRead(sourceFile);
+    const existingPattern = new RegExp(`\\[\\[${this.escapeRegex(safeLinkText)}(?:\\|[^\\]]+)?\\]\\]`, 'i');
+    if (existingPattern.test(content)) {
+      new Notice('A direct link already exists in the source note.');
+      return;
+    }
+
+    const trimmed = content.replace(/\s*$/, '');
+    const updated = trimmed.length > 0
+      ? `${trimmed}\n\n${wikiLink}\n`
+      : `${wikiLink}\n`;
+    await this.app.vault.modify(sourceFile, updated);
+    new Notice(`Linked ${sourceNode.label} → ${targetNode.label}`);
+    void this.loadSelectedDataset(true);
   }
 
   private updateAnalysisSelectionState(): void {
@@ -1401,6 +2149,62 @@ export class GraphExplorerView extends ItemView {
       return;
     }
     this.applyGraphHighlight(item);
+    if (item.type === 'suggestions') {
+      this.fitHighlightedNodesInView(item.nodes);
+    }
+  }
+
+  private fitHighlightedNodesInView(nodeIndexes: number[]): void {
+    const payload = this.lastGraphPayload;
+    const camera = (this.renderer as any)?.camera;
+    if (!payload || !camera || nodeIndexes.length === 0) {
+      return;
+    }
+
+    const uniqueIndexes = Array.from(new Set(nodeIndexes)).filter((index) => (
+      Number.isInteger(index) && index >= 0 && index < payload.positions.length
+    ));
+    if (uniqueIndexes.length < 2) {
+      return;
+    }
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let visibleCount = 0;
+
+    uniqueIndexes.forEach((index) => {
+      const position = payload.positions[index];
+      if (!position) {
+        return;
+      }
+      this.tempVec.set(position[0], position[1], position[2]).project(camera);
+      if (!Number.isFinite(this.tempVec.x) || !Number.isFinite(this.tempVec.y) || !Number.isFinite(this.tempVec.z)) {
+        return;
+      }
+      minX = Math.min(minX, this.tempVec.x);
+      maxX = Math.max(maxX, this.tempVec.x);
+      minY = Math.min(minY, this.tempVec.y);
+      maxY = Math.max(maxY, this.tempVec.y);
+      visibleCount += 1;
+    });
+
+    if (visibleCount < 2) {
+      return;
+    }
+
+    const maxExtent = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minY), Math.abs(maxY));
+    if (!Number.isFinite(maxExtent) || maxExtent <= 0.82) {
+      return;
+    }
+
+    const nextZoom = Math.max(0.35, Math.min(8, this.state.camera.zoom * (0.82 / maxExtent) * 0.98));
+    if (Math.abs(nextZoom - this.state.camera.zoom) < 0.01) {
+      return;
+    }
+    this.state.camera.zoom = nextZoom;
+    this.updateCameraZoom();
   }
 
   private applyGraphHighlight(item: GraphHighlight | null): void {
@@ -1744,7 +2548,7 @@ export class GraphExplorerView extends ItemView {
   async loadSelectedDataset(force = false) {
     const option = DATASET_OPTIONS.find((item) => item.id === this.selectedDataset) ?? DATASET_OPTIONS[0];
     try {
-      this.showStatus(`Loading ${option.label}…`);
+      this.showStatus(`Loading ${option.label}…`, { persistent: true });
       this.lastGraphPayload = null;
       this.selectNode(null, { updateDetails: true, resetFocus: true });
 
@@ -1793,13 +2597,13 @@ export class GraphExplorerView extends ItemView {
       this.recomputeAnalysis();
       this.hideVisibleLabels();
       this.markLabelsDirty(true);
-      this.showStatus(`${option.label}`);
+      this.showStatus('');
       this.applyPendingFocus(true);
       this.requestRender();
     } catch (error) {
       console.error('[4d-graph] Failed to load dataset', error);
       new Notice('Failed to load graph dataset. Check console for details.');
-      this.showStatus('Load failed');
+      this.showStatus('Load failed', { persistent: true });
     }
   }
 

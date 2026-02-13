@@ -13,7 +13,7 @@ export interface ColorRule {
   enabled: boolean;
 }
 
-export interface GraphExplorerSettings {
+export interface GraphExplorerPresetSettings {
   repelForce: number;
   centerForce: number;
   linkForce: number;
@@ -37,7 +37,17 @@ export interface GraphExplorerSettings {
   labelFont: string;
 }
 
-const DEFAULT_SETTINGS: GraphExplorerSettings = {
+export interface GraphExplorerPreset {
+  name: string;
+  settings: GraphExplorerPresetSettings;
+}
+
+export interface GraphExplorerSettings extends GraphExplorerPresetSettings {
+  customPresets: GraphExplorerPreset[];
+  activePresetName: string;
+}
+
+const DEFAULT_PRESET_SETTINGS: GraphExplorerPresetSettings = {
   repelForce: 0,
   centerForce: 0,
   linkForce: 0,
@@ -59,6 +69,12 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   colorRules: [],
   theme: 'neon',
   labelFont: 'default',
+};
+
+const DEFAULT_SETTINGS: GraphExplorerSettings = {
+  ...DEFAULT_PRESET_SETTINGS,
+  customPresets: [],
+  activePresetName: '',
 };
 
 const REOPEN_VIEW_SESSION_KEY = 'obsidian-4d-graph-explorer:reopen-view';
@@ -140,10 +156,12 @@ export default class GraphExplorerPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const stored = await this.loadData();
+    const stored = await this.loadData() as Partial<GraphExplorerSettings> | null;
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...(stored ?? {}),
+      customPresets: Array.isArray(stored?.customPresets) ? stored.customPresets : [],
+      activePresetName: typeof stored?.activePresetName === 'string' ? stored.activePresetName : '',
     };
   }
 
@@ -159,6 +177,13 @@ export default class GraphExplorerPlugin extends Plugin {
 
   async handleVisualSettingChange(options: { reloadGraph?: boolean } = {}): Promise<void> {
     const { reloadGraph = false } = options;
+    await this.saveSettings();
+    this.scheduleGraphRefresh(reloadGraph);
+  }
+
+  async handleBulkSettingChange(options: { reloadGraph?: boolean } = {}): Promise<void> {
+    const { reloadGraph = false } = options;
+    this.applyForceLayoutSettings();
     await this.saveSettings();
     this.scheduleGraphRefresh(reloadGraph);
   }
