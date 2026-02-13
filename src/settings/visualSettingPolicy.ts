@@ -2,6 +2,7 @@ export type VisualSettingAction =
   | 'theme'
   | 'node-size'
   | 'show-links'
+  | 'auto-performance-mode'
   | 'show-only-existing-files'
   | 'color-rules'
   | 'label-font';

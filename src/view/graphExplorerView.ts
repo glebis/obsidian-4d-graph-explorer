@@ -194,6 +194,7 @@ export class GraphExplorerView extends ItemView {
   private nodeSizeSliderEl!: HTMLInputElement;
   private nodeSizeValueEl!: HTMLSpanElement;
   private showLinksToggleEl!: HTMLInputElement;
+  private autoPerformanceModeToggleEl!: HTMLInputElement;
   private showOnlyExistingFilesToggleEl!: HTMLInputElement;
   private configToggleBtn!: HTMLButtonElement;
   private analysisToggleBtn!: HTMLButtonElement;
@@ -252,6 +253,10 @@ export class GraphExplorerView extends ItemView {
 
   private syncRendererPerformanceProfile(): void {
     if (!this.renderer) return;
+    if (!this.settings.autoPerformanceMode) {
+      this.renderer.setPerformanceProfile({ maxPixelRatio: 2, edgeStride: 1 });
+      return;
+    }
     const meta = this.activeObject?.meta;
     if (!meta || meta.type !== 'graph') {
       this.renderer.setPerformanceProfile({ maxPixelRatio: 2, edgeStride: 1 });
@@ -310,11 +315,16 @@ export class GraphExplorerView extends ItemView {
     if (this.showLinksToggleEl) {
       this.showLinksToggleEl.checked = settings.showLinks;
     }
+    if (this.autoPerformanceModeToggleEl) {
+      this.autoPerformanceModeToggleEl.checked = settings.autoPerformanceMode;
+    }
     if (this.showOnlyExistingFilesToggleEl) {
       this.showOnlyExistingFilesToggleEl.checked = settings.showOnlyExistingFiles;
     }
+    this.syncRendererPerformanceProfile();
     this.updateTheme();
     this.applyLabelFont();
+    this.requestRender();
   }
 
   private updateTheme() {
@@ -843,6 +853,24 @@ export class GraphExplorerView extends ItemView {
       this.settings.showLinks = value;
       this.state.graph.showLinks = value;
       this.notifyVisualSettingChange('show-links');
+    });
+
+    const autoPerformanceModeRow = body.createDiv({ cls: 'hyper-config-row' });
+    const autoPerformanceModeId = `hyper-auto-performance-mode-${uniqueSuffix}`;
+    autoPerformanceModeRow.createEl('label', { text: 'Auto performance mode', attr: { for: autoPerformanceModeId } });
+    this.autoPerformanceModeToggleEl = autoPerformanceModeRow.createEl('input', {
+      attr: {
+        id: autoPerformanceModeId,
+        type: 'checkbox',
+      },
+    });
+    this.autoPerformanceModeToggleEl.checked = this.settings.autoPerformanceMode;
+    this.autoPerformanceModeToggleEl.addEventListener('change', (event) => {
+      const value = (event.target as HTMLInputElement).checked;
+      this.settings.autoPerformanceMode = value;
+      this.syncRendererPerformanceProfile();
+      this.requestRender();
+      this.notifyVisualSettingChange('auto-performance-mode');
     });
 
     const showOnlyExistingFilesRow = body.createDiv({ cls: 'hyper-config-row' });

@@ -20,6 +20,7 @@ export interface GraphExplorerSettings {
   linkDistance: number;
   nodeSizeMultiplier: number;
   showLinks: boolean;
+  autoPerformanceMode: boolean;
   showOnlyExistingFiles: boolean;
   colorRules: ColorRule[];
   theme: string;
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   linkDistance: 1.6,
   nodeSizeMultiplier: 1,
   showLinks: true,
+  autoPerformanceMode: true,
   showOnlyExistingFiles: true,
   colorRules: [],
   theme: 'neon',

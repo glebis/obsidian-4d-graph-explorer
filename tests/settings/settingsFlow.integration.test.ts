@@ -84,3 +84,17 @@ test('settings flow: existing-file toggle requires reload', () => {
   timers.advanceBy(600);
   assert.deepEqual(refreshes, [true]);
 });
+
+test('settings flow: auto performance mode toggle stays visual-only', () => {
+  const timers = new FakeTimers();
+  const refreshes: boolean[] = [];
+  const scheduler = new GraphRefreshScheduler({
+    setTimeout: (callback, delayMs) => timers.setTimeout(callback, delayMs),
+    clearTimeout: (id) => timers.clearTimeout(id),
+    onRefresh: (reloadGraph) => refreshes.push(reloadGraph),
+  });
+
+  scheduler.schedule(visualSettingRefreshOptions('auto-performance-mode').reloadGraph);
+  timers.advanceBy(200);
+  assert.deepEqual(refreshes, [false]);
+});

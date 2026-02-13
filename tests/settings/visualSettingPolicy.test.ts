@@ -5,6 +5,7 @@ import { visualSettingRefreshOptions, visualSettingRequiresGraphReload } from '.
 test('visualSettingPolicy keeps theme and label font changes as visual-only refreshes', () => {
   assert.equal(visualSettingRequiresGraphReload('theme'), false);
   assert.equal(visualSettingRequiresGraphReload('label-font'), false);
+  assert.equal(visualSettingRequiresGraphReload('auto-performance-mode'), false);
   assert.deepEqual(visualSettingRefreshOptions('theme'), { reloadGraph: false });
 });
 
