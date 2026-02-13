@@ -702,7 +702,7 @@ export class GraphExplorerView extends ItemView {
     });
     this.autoSpeedValueEl = speedControl.createEl('span', { cls: 'hyper-config-value' });
 
-    const animationsRow = body.createDiv({ cls: 'hyper-config-row' });
+    const animationsRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
     const animationsId = `hyper-animations-${uniqueSuffix}`;
     animationsRow.createEl('label', { text: 'Enable animations', attr: { for: animationsId } });
     const animationsToggle = animationsRow.createEl('input', {
@@ -838,7 +838,7 @@ export class GraphExplorerView extends ItemView {
     });
     this.nodeSizeValueEl = nodeSizeControl.createEl('span', { cls: 'hyper-config-value' });
 
-    const showLinksRow = body.createDiv({ cls: 'hyper-config-row' });
+    const showLinksRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
     const showLinksId = `hyper-show-links-${uniqueSuffix}`;
     showLinksRow.createEl('label', { text: 'Show connecting lines', attr: { for: showLinksId } });
     this.showLinksToggleEl = showLinksRow.createEl('input', {
@@ -855,7 +855,7 @@ export class GraphExplorerView extends ItemView {
       this.notifyVisualSettingChange('show-links');
     });
 
-    const autoPerformanceModeRow = body.createDiv({ cls: 'hyper-config-row' });
+    const autoPerformanceModeRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
     const autoPerformanceModeId = `hyper-auto-performance-mode-${uniqueSuffix}`;
     autoPerformanceModeRow.createEl('label', { text: 'Auto performance mode', attr: { for: autoPerformanceModeId } });
     this.autoPerformanceModeToggleEl = autoPerformanceModeRow.createEl('input', {
@@ -873,7 +873,7 @@ export class GraphExplorerView extends ItemView {
       this.notifyVisualSettingChange('auto-performance-mode');
     });
 
-    const showOnlyExistingFilesRow = body.createDiv({ cls: 'hyper-config-row' });
+    const showOnlyExistingFilesRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
     const showOnlyExistingFilesId = `hyper-show-only-existing-files-${uniqueSuffix}`;
     showOnlyExistingFilesRow.createEl('label', { text: 'Show only existing files', attr: { for: showOnlyExistingFilesId } });
     this.showOnlyExistingFilesToggleEl = showOnlyExistingFilesRow.createEl('input', {
@@ -934,7 +934,7 @@ export class GraphExplorerView extends ItemView {
 
         const ruleBody = ruleEl.createDiv({ cls: 'hyper-color-rule-body' });
 
-        const typeRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        const typeRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row hyper-color-rule-row-type' });
         typeRow.createEl('label', { text: 'Type' });
         const typeSelect = typeRow.createEl('select');
         (['tag', 'path', 'filename'] as ColorRuleType[]).forEach((type) => {
@@ -949,7 +949,7 @@ export class GraphExplorerView extends ItemView {
           this.notifyVisualSettingChange('color-rules');
         });
 
-        const patternRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        const patternRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row hyper-color-rule-row-pattern' });
         patternRow.createEl('label', { text: 'Pattern' });
         const patternInput = patternRow.createEl('input', {
           attr: {
@@ -963,7 +963,7 @@ export class GraphExplorerView extends ItemView {
           this.notifyVisualSettingChange('color-rules');
         });
 
-        const colorRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row' });
+        const colorRow = ruleBody.createDiv({ cls: 'hyper-color-rule-row hyper-color-rule-row-color' });
         colorRow.createEl('label', { text: 'Color' });
         const colorInput = colorRow.createEl('input', {
           attr: {

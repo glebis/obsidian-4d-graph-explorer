@@ -328,6 +328,19 @@
   color: var(--hyper-panel-muted-text);
 }
 
+.hyper-config-row-checkbox {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hyper-config-row-checkbox label {
+  flex: 1 1 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .hyper-config-row select,
 .hyper-config-row input[type='range'] {
   background: var(--hyper-control-bg);
@@ -606,24 +619,26 @@
   background: var(--hyper-color-rule-bg);
   border: 1px solid var(--hyper-color-rule-border);
   border-radius: 10px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 8px 10px;
+  position: relative;
 }
 
 .hyper-color-rule-header {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  justify-content: flex-end;
+  gap: 4px;
+  z-index: 2;
 }
 
 .hyper-color-rule-toggle,
 .hyper-color-rule-delete {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px;
+  padding: 0;
 }
 
 .hyper-color-rule-toggle.is-disabled {
@@ -633,13 +648,15 @@
 .hyper-color-rule-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
+  padding-right: 56px;
 }
 
 .hyper-color-rule-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
 }
 
 .hyper-color-rule-row label {
@@ -647,6 +664,8 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--hyper-panel-muted-text);
+  margin: 0;
+  line-height: 1;
 }
 
 .hyper-color-rule-row select,
@@ -655,20 +674,34 @@
   border: 1px solid var(--hyper-control-border);
   border-radius: 6px;
   color: var(--hyper-control-text);
-  padding: 5px 8px;
+  padding: 4px 8px;
   font-size: 11px;
   box-shadow: var(--hyper-inset-shadow);
   outline: none;
+  min-height: 28px;
+  width: 100%;
 }
 
 .hyper-color-rule-row input[type='color'] {
-  width: 60px;
-  height: 32px;
+  width: 84px;
+  height: 30px;
   padding: 2px;
   background: var(--hyper-control-bg);
   border: 1px solid var(--hyper-control-border);
   border-radius: 6px;
   cursor: pointer;
+  justify-self: start;
+}
+
+.hyper-color-rule-row-color {
+  grid-template-columns: 56px auto;
+}
+
+@media (max-width: 380px) {
+  .hyper-color-rule-body {
+    padding-right: 0;
+    margin-top: 28px;
+  }
 }
 
 .hyper-add-rule-btn {
@@ -695,4 +728,6 @@
   height: 16px;
   accent-color: var(--hyper-checkbox-accent);
   cursor: pointer;
+  margin: 0;
+  flex: 0 0 auto;
 }

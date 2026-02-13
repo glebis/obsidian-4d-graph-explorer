@@ -41,11 +41,15 @@ const DEFAULT_SETTINGS: GraphExplorerSettings = {
   labelFont: 'default',
 };
 
+const REOPEN_VIEW_SESSION_KEY = 'obsidian-4d-graph-explorer:reopen-view';
+
 export default class GraphExplorerPlugin extends Plugin {
   settings: GraphExplorerSettings = { ...DEFAULT_SETTINGS };
   private refreshScheduler: GraphRefreshScheduler | null = null;
+  private isWindowClosing = false;
 
   async onload(): Promise<void> {
+    this.isWindowClosing = false;
     await this.loadSettings();
     this.applyForceLayoutSettings();
     this.refreshScheduler = new GraphRefreshScheduler({
@@ -77,12 +81,33 @@ export default class GraphExplorerPlugin extends Plugin {
         }
       });
     }));
+
+    this.registerDomEvent(window, 'beforeunload', () => {
+      this.isWindowClosing = true;
+    });
+
+    this.app.workspace.onLayoutReady(() => {
+      void this.restoreViewAfterReloadIfNeeded();
+    });
   }
 
   onunload(): void {
     this.refreshScheduler?.dispose();
     this.refreshScheduler = null;
-    this.app.workspace.getLeavesOfType(HYPER_VIEW_TYPE).forEach((leaf) => leaf.detach());
+    const openLeafCount = this.app.workspace.getLeavesOfType(HYPER_VIEW_TYPE).length;
+    if (openLeafCount > 0) {
+      try {
+        window.sessionStorage.setItem(REOPEN_VIEW_SESSION_KEY, '1');
+      } catch (error) {
+        console.debug('[4d-graph] Failed to persist reopen marker', error);
+      }
+    }
+
+    // Keep leaves intact when the app window is reloading/closing so Obsidian can restore them.
+    // For plugin disable/reload in-session, close custom leaves and restore them on next load.
+    if (!this.isWindowClosing) {
+      this.app.workspace.detachLeavesOfType(HYPER_VIEW_TYPE);
+    }
   }
 
   private applyForceLayoutSettings(): void {
@@ -150,5 +175,26 @@ export default class GraphExplorerPlugin extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: HYPER_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  private async restoreViewAfterReloadIfNeeded(): Promise<void> {
+    let shouldReopen = false;
+    try {
+      shouldReopen = window.sessionStorage.getItem(REOPEN_VIEW_SESSION_KEY) === '1';
+      if (shouldReopen) {
+        window.sessionStorage.removeItem(REOPEN_VIEW_SESSION_KEY);
+      }
+    } catch (error) {
+      console.debug('[4d-graph] Failed to read reopen marker', error);
+      return;
+    }
+    if (!shouldReopen) {
+      return;
+    }
+    const existingLeaves = this.app.workspace.getLeavesOfType(HYPER_VIEW_TYPE);
+    if (existingLeaves.length > 0) {
+      return;
+    }
+    await this.activateView();
   }
 }
