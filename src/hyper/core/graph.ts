@@ -531,22 +531,25 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
   const linkStrength = Math.max(0, config.linkForce);
   const targetDistance = Math.max(0.05, config.linkDistance || DEFAULT_FORCE_LAYOUT.linkDistance);
 
-  const positions: Vec4[] = vertices.map((vertex) => [...vertex] as Vec4);
-  const velocities: Vec4[] = Array.from({ length: count }, () => [0, 0, 0, 0] as Vec4);
-  const forces: Vec4[] = Array.from({ length: count }, () => [0, 0, 0, 0] as Vec4);
+  const positions = new Float32Array(count * 4);
+  const velocities = new Float32Array(count * 4);
+  const forces = new Float32Array(count * 4);
+
+  for (let i = 0; i < count; i += 1) {
+    const vertex = vertices[i];
+    const base = i * 4;
+    positions[base] = vertex[0];
+    positions[base + 1] = vertex[1];
+    positions[base + 2] = vertex[2];
+    positions[base + 3] = vertex[3];
+  }
 
   const damping = 0.85;
   const timeStep = 0.02;
   const epsilon = 0.0001;
 
   for (let iter = 0; iter < iterations; iter += 1) {
-    for (let i = 0; i < count; i += 1) {
-      const f = forces[i];
-      f[0] = 0;
-      f[1] = 0;
-      f[2] = 0;
-      f[3] = 0;
-    }
+    forces.fill(0);
 
     if (repel > 0) {
       if (plan.useApproximateRepulsion && plan.repulsionOffsets.length > 0) {
@@ -556,51 +559,51 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
           for (let i = 0; i < count; i += 1) {
             const j = (i + rotatedOffset) % count;
             if (j <= i) continue;
-            const pi = positions[i];
-            const pj = positions[j];
-            let dx = pi[0] - pj[0];
-            let dy = pi[1] - pj[1];
-            let dz = pi[2] - pj[2];
-            let dw = pi[3] - pj[3];
+            const iBase = i * 4;
+            const jBase = j * 4;
+            let dx = positions[iBase] - positions[jBase];
+            let dy = positions[iBase + 1] - positions[jBase + 1];
+            let dz = positions[iBase + 2] - positions[jBase + 2];
+            let dw = positions[iBase + 3] - positions[jBase + 3];
             const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
             const scale = repel / distSq;
             dx *= scale;
             dy *= scale;
             dz *= scale;
             dw *= scale;
-            forces[i][0] += dx;
-            forces[i][1] += dy;
-            forces[i][2] += dz;
-            forces[i][3] += dw;
-            forces[j][0] -= dx;
-            forces[j][1] -= dy;
-            forces[j][2] -= dz;
-            forces[j][3] -= dw;
+            forces[iBase] += dx;
+            forces[iBase + 1] += dy;
+            forces[iBase + 2] += dz;
+            forces[iBase + 3] += dw;
+            forces[jBase] -= dx;
+            forces[jBase + 1] -= dy;
+            forces[jBase + 2] -= dz;
+            forces[jBase + 3] -= dw;
           }
         }
       } else {
         for (let i = 0; i < count; i += 1) {
+          const iBase = i * 4;
           for (let j = i + 1; j < count; j += 1) {
-            const pi = positions[i];
-            const pj = positions[j];
-            let dx = pi[0] - pj[0];
-            let dy = pi[1] - pj[1];
-            let dz = pi[2] - pj[2];
-            let dw = pi[3] - pj[3];
+            const jBase = j * 4;
+            let dx = positions[iBase] - positions[jBase];
+            let dy = positions[iBase + 1] - positions[jBase + 1];
+            let dz = positions[iBase + 2] - positions[jBase + 2];
+            let dw = positions[iBase + 3] - positions[jBase + 3];
             const distSq = dx * dx + dy * dy + dz * dz + dw * dw + epsilon;
             const scale = repel / distSq;
             dx *= scale;
             dy *= scale;
             dz *= scale;
             dw *= scale;
-            forces[i][0] += dx;
-            forces[i][1] += dy;
-            forces[i][2] += dz;
-            forces[i][3] += dw;
-            forces[j][0] -= dx;
-            forces[j][1] -= dy;
-            forces[j][2] -= dz;
-            forces[j][3] -= dw;
+            forces[iBase] += dx;
+            forces[iBase + 1] += dy;
+            forces[iBase + 2] += dz;
+            forces[iBase + 3] += dw;
+            forces[jBase] -= dx;
+            forces[jBase + 1] -= dy;
+            forces[jBase + 2] -= dz;
+            forces[jBase + 3] -= dw;
           }
         }
       }
@@ -608,23 +611,23 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
 
     if (center > 0) {
       for (let i = 0; i < count; i += 1) {
-        const pos = positions[i];
-        forces[i][0] -= pos[0] * center;
-        forces[i][1] -= pos[1] * center;
-        forces[i][2] -= pos[2] * center;
-        forces[i][3] -= pos[3] * center;
+        const base = i * 4;
+        forces[base] -= positions[base] * center;
+        forces[base + 1] -= positions[base + 1] * center;
+        forces[base + 2] -= positions[base + 2] * center;
+        forces[base + 3] -= positions[base + 3] * center;
       }
     }
 
     if (linkStrength > 0 && edges.length > 0) {
       for (let index = 0; index < edges.length; index += 1) {
         const [aIndex, bIndex] = edges[index];
-        const pa = positions[aIndex];
-        const pb = positions[bIndex];
-        let dx = pb[0] - pa[0];
-        let dy = pb[1] - pa[1];
-        let dz = pb[2] - pa[2];
-        let dw = pb[3] - pa[3];
+        const aBase = aIndex * 4;
+        const bBase = bIndex * 4;
+        let dx = positions[bBase] - positions[aBase];
+        let dy = positions[bBase + 1] - positions[aBase + 1];
+        let dz = positions[bBase + 2] - positions[aBase + 2];
+        let dw = positions[bBase + 3] - positions[aBase + 3];
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
         if (distSq < epsilon) continue;
         const dist = Math.sqrt(distSq);
@@ -635,38 +638,37 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
         dy *= scale;
         dz *= scale;
         dw *= scale;
-        forces[aIndex][0] += dx;
-        forces[aIndex][1] += dy;
-        forces[aIndex][2] += dz;
-        forces[aIndex][3] += dw;
-        forces[bIndex][0] -= dx;
-        forces[bIndex][1] -= dy;
-        forces[bIndex][2] -= dz;
-        forces[bIndex][3] -= dw;
+        forces[aBase] += dx;
+        forces[aBase + 1] += dy;
+        forces[aBase + 2] += dz;
+        forces[aBase + 3] += dw;
+        forces[bBase] -= dx;
+        forces[bBase + 1] -= dy;
+        forces[bBase + 2] -= dz;
+        forces[bBase + 3] -= dw;
       }
     }
 
     for (let i = 0; i < count; i += 1) {
-      const vel = velocities[i];
-      const force = forces[i];
-      vel[0] = (vel[0] + force[0] * timeStep) * damping;
-      vel[1] = (vel[1] + force[1] * timeStep) * damping;
-      vel[2] = (vel[2] + force[2] * timeStep) * damping;
-      vel[3] = (vel[3] + force[3] * timeStep) * damping;
-      positions[i][0] += vel[0];
-      positions[i][1] += vel[1];
-      positions[i][2] += vel[2];
-      positions[i][3] += vel[3];
+      const base = i * 4;
+      velocities[base] = (velocities[base] + forces[base] * timeStep) * damping;
+      velocities[base + 1] = (velocities[base + 1] + forces[base + 1] * timeStep) * damping;
+      velocities[base + 2] = (velocities[base + 2] + forces[base + 2] * timeStep) * damping;
+      velocities[base + 3] = (velocities[base + 3] + forces[base + 3] * timeStep) * damping;
+      positions[base] += velocities[base];
+      positions[base + 1] += velocities[base + 1];
+      positions[base + 2] += velocities[base + 2];
+      positions[base + 3] += velocities[base + 3];
     }
   }
 
   const centroid: Vec4 = [0, 0, 0, 0];
   for (let i = 0; i < count; i += 1) {
-    const pos = positions[i];
-    centroid[0] += pos[0];
-    centroid[1] += pos[1];
-    centroid[2] += pos[2];
-    centroid[3] += pos[3];
+    const base = i * 4;
+    centroid[0] += positions[base];
+    centroid[1] += positions[base + 1];
+    centroid[2] += positions[base + 2];
+    centroid[3] += positions[base + 3];
   }
   const invCount = 1 / count;
   centroid[0] *= invCount;
@@ -676,12 +678,15 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
 
   let maxRadiusSq = 0;
   for (let i = 0; i < count; i += 1) {
-    const pos = positions[i];
-    pos[0] -= centroid[0];
-    pos[1] -= centroid[1];
-    pos[2] -= centroid[2];
-    pos[3] -= centroid[3];
-    const radiusSq = pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2] + pos[3] * pos[3];
+    const base = i * 4;
+    positions[base] -= centroid[0];
+    positions[base + 1] -= centroid[1];
+    positions[base + 2] -= centroid[2];
+    positions[base + 3] -= centroid[3];
+    const radiusSq = positions[base] * positions[base]
+      + positions[base + 1] * positions[base + 1]
+      + positions[base + 2] * positions[base + 2]
+      + positions[base + 3] * positions[base + 3];
     if (radiusSq > maxRadiusSq) maxRadiusSq = radiusSq;
   }
 
@@ -690,11 +695,11 @@ function applyForceLayout(vertices: Vec4[], edges: Array<[number, number]>, conf
   const scale = maxRadius > clampRadius ? clampRadius / maxRadius : 1;
 
   for (let i = 0; i < count; i += 1) {
-    const pos = positions[i];
-    vertices[i][0] = pos[0] * scale;
-    vertices[i][1] = pos[1] * scale;
-    vertices[i][2] = pos[2] * scale;
-    vertices[i][3] = pos[3] * scale;
+    const base = i * 4;
+    vertices[i][0] = positions[base] * scale;
+    vertices[i][1] = positions[base + 1] * scale;
+    vertices[i][2] = positions[base + 2] * scale;
+    vertices[i][3] = positions[base + 3] * scale;
   }
 }
 
