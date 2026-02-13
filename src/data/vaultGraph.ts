@@ -25,6 +25,17 @@ export interface VaultGraphOptions {
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'tiff']);
 const noteSummaryCache = new Map<string, { mtime: number; summary: string }>();
+const nodeSnapshotCache = new Map<string, { mtime: number; snapshot: NodeSnapshot }>();
+
+interface NodeSnapshot {
+  label: string;
+  category: string;
+  summary: string;
+  imageUrl: string;
+  media: string[];
+  tags: string[];
+  isMoc: boolean;
+}
 
 function isFileExcluded(app: App, file: TFile): boolean {
   // Access Obsidian's user ignore filters from vault config
@@ -136,6 +147,32 @@ function gatherNodeMedia(app: App, file: TFile, cache: CachedMetadata | null): {
     image: hero,
     gallery: Array.from(media),
   };
+}
+
+async function buildNodeSnapshot(app: App, file: TFile): Promise<NodeSnapshot> {
+  const cached = nodeSnapshotCache.get(file.path);
+  if (cached && cached.mtime === file.stat.mtime) {
+    return cached.snapshot;
+  }
+
+  const cache = app.metadataCache.getFileCache(file) ?? null;
+  const summary = await extractNoteSummary(app, file, cache);
+  const { image, gallery } = gatherNodeMedia(app, file, cache);
+  const tags = extractTags(cache);
+  const snapshot: NodeSnapshot = {
+    label: file.basename,
+    category: getCategoryForFile(file),
+    summary,
+    imageUrl: image ?? '',
+    media: gallery,
+    tags,
+    isMoc: tags.includes('moc'),
+  };
+  nodeSnapshotCache.set(file.path, {
+    mtime: file.stat.mtime,
+    snapshot,
+  });
+  return snapshot;
 }
 
 function scoreNodeImportance(path: string, maps: DegreeMaps): number {
@@ -272,25 +309,21 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 
   const existingNodeData = await Promise.all(
     filtered.map(async (file) => {
-      const cache = app.metadataCache.getFileCache(file) ?? null;
-      const summary = await extractNoteSummary(app, file, cache);
-      const { image, gallery } = gatherNodeMedia(app, file, cache);
+      const snapshot = await buildNodeSnapshot(app, file);
       const importance = scoreNodeImportance(file.path, degreeMaps);
-      const tags = extractTags(cache);
-      const isMoc = tags.includes('moc');
       const nodeId = file.path;
 
-      const customColor = getCustomColorForFile(file.path, tags, colorRules);
+      const customColor = getCustomColorForFile(file.path, snapshot.tags, colorRules);
       const nodeData: RawGraphNode = {
         id: nodeId,
-        label: file.basename,
-        category: getCategoryForFile(file),
-        summary,
+        label: snapshot.label,
+        category: snapshot.category,
+        summary: snapshot.summary,
         importance,
         size: importance * 2.5,
-        imageUrl: image,
-        media: gallery,
-        raw: { isMoc, tags },
+        imageUrl: snapshot.imageUrl,
+        media: [...snapshot.media],
+        raw: { isMoc: snapshot.isMoc, tags: [...snapshot.tags] },
       };
       if (customColor !== null) {
         nodeData.color = customColor;
@@ -378,6 +411,7 @@ export async function buildVaultGraph(app: App, options: VaultGraphOptions): Pro
 export const __vaultGraphInternals = {
   clearCaches(): void {
     noteSummaryCache.clear();
+    nodeSnapshotCache.clear();
     resolvedLinkDerivedCache.clear();
   },
 };
