@@ -59,6 +59,7 @@ export class HyperRenderer {
     this.edgeStride = 1;
     this.lastClientWidth = 0;
     this.lastClientHeight = 0;
+    this.lineThemeColorCache = new Float32Array(0);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
     this.camera.position.set(0, 0, 5);
@@ -157,6 +158,7 @@ export class HyperRenderer {
     this.isGraph = !!(object?.meta && object.meta.type === 'graph');
     this.graphMeta = this.isGraph ? object.meta : null;
     this.vertexCache3 = new Array(object.vertices.length).fill(null);
+    this.lineThemeColorCache = new Float32Array(object.vertices.length * 3);
     this.lastGraphLabelPushAt = 0;
     this.lastGraphLabelFocusNode = null;
     this.lastGraphVertexVisibilityRef = null;
@@ -511,6 +513,25 @@ export class HyperRenderer {
 
     const useSlice = sliceMode === 'hyperplane';
     const useShadow = sliceMode === 'shadow';
+    let themedLineColors = null;
+    if (theme && showLines) {
+      if (!this.lineThemeColorCache || this.lineThemeColorCache.length !== vertexCount * 3) {
+        this.lineThemeColorCache = new Float32Array(vertexCount * 3);
+      }
+      themedLineColors = this.lineThemeColorCache;
+      for (let i = 0; i < vertexCount; i += 1) {
+        const vec4 = vertices4d[i];
+        const vec3 = projected[i];
+        const color = theme.lineColor({
+          normW: (vec4[3] - wMin) / wRange,
+          depth: (vec3[2] - depthMin) / depthRange,
+        });
+        const base = i * 3;
+        themedLineColors[base] = color[0];
+        themedLineColors[base + 1] = color[1];
+        themedLineColors[base + 2] = color[2];
+      }
+    }
 
     let lineIndex = 0;
     let shadowIndex = 0;
@@ -567,11 +588,6 @@ export class HyperRenderer {
         const a3 = projected[aIndex];
         const b3 = projected[bIndex];
 
-        const normWa = (a4[3] - wMin) / wRange;
-        const normWb = (b4[3] - wMin) / wRange;
-        const depthA = (a3[2] - depthMin) / depthRange;
-        const depthB = (b3[2] - depthMin) / depthRange;
-
         if (showLines) {
           if (isGraph && graphLinks) {
             const link = graphLinks[i];
@@ -584,15 +600,15 @@ export class HyperRenderer {
             let colorBR = link.color[0];
             let colorBG = link.color[1];
             let colorBB = link.color[2];
-            if (theme) {
-              const themedLineA = theme.lineColor({ normW: normWa, depth: depthA });
-              const themedLineB = theme.lineColor({ normW: normWb, depth: depthB });
-              colorAR = blendGraphChannel(colorAR, themedLineA[0], GRAPH_THEME_BLEND);
-              colorAG = blendGraphChannel(colorAG, themedLineA[1], GRAPH_THEME_BLEND);
-              colorAB = blendGraphChannel(colorAB, themedLineA[2], GRAPH_THEME_BLEND);
-              colorBR = blendGraphChannel(colorBR, themedLineB[0], GRAPH_THEME_BLEND);
-              colorBG = blendGraphChannel(colorBG, themedLineB[1], GRAPH_THEME_BLEND);
-              colorBB = blendGraphChannel(colorBB, themedLineB[2], GRAPH_THEME_BLEND);
+            if (themedLineColors) {
+              const colorIndexA = aIndex * 3;
+              const colorIndexB = bIndex * 3;
+              colorAR = blendGraphChannel(colorAR, themedLineColors[colorIndexA], GRAPH_THEME_BLEND);
+              colorAG = blendGraphChannel(colorAG, themedLineColors[colorIndexA + 1], GRAPH_THEME_BLEND);
+              colorAB = blendGraphChannel(colorAB, themedLineColors[colorIndexA + 2], GRAPH_THEME_BLEND);
+              colorBR = blendGraphChannel(colorBR, themedLineColors[colorIndexB], GRAPH_THEME_BLEND);
+              colorBG = blendGraphChannel(colorBG, themedLineColors[colorIndexB + 1], GRAPH_THEME_BLEND);
+              colorBB = blendGraphChannel(colorBB, themedLineColors[colorIndexB + 2], GRAPH_THEME_BLEND);
             }
             tempColor.setRGB(colorAR * weight, colorAG * weight, colorAB * weight);
             positions[base] = a3[0];
@@ -607,22 +623,22 @@ export class HyperRenderer {
             colors[base + 3] = colorBR * weight;
             colors[base + 4] = colorBG * weight;
             colors[base + 5] = colorBB * weight;
-          } else if (this.theme) {
-            const colorA = this.theme.lineColor({ normW: normWa, depth: depthA });
-            const colorB = this.theme.lineColor({ normW: normWb, depth: depthB });
+          } else if (themedLineColors) {
             const base = lineIndex * 6;
+            const colorIndexA = aIndex * 3;
+            const colorIndexB = bIndex * 3;
             positions[base] = a3[0];
             positions[base + 1] = a3[1];
             positions[base + 2] = a3[2];
             positions[base + 3] = b3[0];
             positions[base + 4] = b3[1];
             positions[base + 5] = b3[2];
-            colors[base] = colorA[0];
-            colors[base + 1] = colorA[1];
-            colors[base + 2] = colorA[2];
-            colors[base + 3] = colorB[0];
-            colors[base + 4] = colorB[1];
-            colors[base + 5] = colorB[2];
+            colors[base] = themedLineColors[colorIndexA];
+            colors[base + 1] = themedLineColors[colorIndexA + 1];
+            colors[base + 2] = themedLineColors[colorIndexA + 2];
+            colors[base + 3] = themedLineColors[colorIndexB];
+            colors[base + 4] = themedLineColors[colorIndexB + 1];
+            colors[base + 5] = themedLineColors[colorIndexB + 2];
           }
         }
 
