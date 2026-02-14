@@ -37,6 +37,7 @@ Copy the built `main.js`, `manifest.json`, and `styles.css` to your vault's plug
 Open the graph with the ribbon icon or the command palette: **Open 4D Graph Explorer**.
 
 The graph opens in a side panel. Use the config panel (gear icon) to adjust forces, toggle links, change themes, and add color rules.
+Use the toolbar play/pause control to start or stop auto-rotation.
 
 ## Development
 
