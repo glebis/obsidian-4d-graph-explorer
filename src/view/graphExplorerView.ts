@@ -57,6 +57,12 @@ interface GraphRenderState {
   glow: number;
   pointOpacity: number;
   nodeScale: number;
+  nodeSizeMode: 'fixed' | 'connections';
+  nodeSizeMinScale: number;
+  nodeSizeMaxScale: number;
+  nodeSizeIncomingWeight: number;
+  nodeSizeOutgoingWeight: number;
+  nodeSizeCurve: 'linear' | 'sqrt' | 'log';
   showLinks: boolean;
   vertexVisibility?: number[] | null;
   edgeVisibility?: number[] | null;
@@ -144,6 +150,11 @@ const CAMERA_PRESETS: CameraPreset[] = [
 ];
 
 const PRESET_SHORTCUT_LABEL = 'Ctrl/Cmd+Shift+[ or ] · Alt+Arrow';
+const AUTO_ROTATE_MAX_SPEED = 1.5;
+const AUTO_ROTATE_CURVE_EXPONENT = 2;
+const AUTO_ROTATE_BASE_RATE_XY = 0.09;
+const AUTO_ROTATE_BASE_RATE_XW = 0.075;
+const AUTO_ROTATE_BASE_RATE_YZ = 0.06;
 
 const BUILTIN_PRESET_BASE: GraphExplorerPresetSettings = {
   repelForce: 0,
@@ -151,6 +162,12 @@ const BUILTIN_PRESET_BASE: GraphExplorerPresetSettings = {
   linkForce: 0,
   linkDistance: 1.6,
   nodeSizeMultiplier: 1,
+  nodeSizeMode: 'fixed',
+  nodeSizeMinScale: 0.75,
+  nodeSizeMaxScale: 2.25,
+  nodeSizeIncomingWeight: 1,
+  nodeSizeOutgoingWeight: 1,
+  nodeSizeCurve: 'sqrt',
   showLinks: true,
   autoPerformanceMode: true,
   labelRankingMode: 'hybrid',
@@ -269,6 +286,16 @@ export class GraphExplorerView extends ItemView {
   private linkDistanceValueEl!: HTMLSpanElement;
   private nodeSizeSliderEl!: HTMLInputElement;
   private nodeSizeValueEl!: HTMLSpanElement;
+  private nodeSizeModeSelectEl!: HTMLSelectElement;
+  private nodeSizeMinScaleSliderEl!: HTMLInputElement;
+  private nodeSizeMinScaleValueEl!: HTMLSpanElement;
+  private nodeSizeMaxScaleSliderEl!: HTMLInputElement;
+  private nodeSizeMaxScaleValueEl!: HTMLSpanElement;
+  private nodeSizeIncomingWeightSliderEl!: HTMLInputElement;
+  private nodeSizeIncomingWeightValueEl!: HTMLSpanElement;
+  private nodeSizeOutgoingWeightSliderEl!: HTMLInputElement;
+  private nodeSizeOutgoingWeightValueEl!: HTMLSpanElement;
+  private nodeSizeCurveSelectEl!: HTMLSelectElement;
   private showLinksToggleEl!: HTMLInputElement;
   private autoPerformanceModeToggleEl!: HTMLInputElement;
   private showOnlyExistingFilesToggleEl!: HTMLInputElement;
@@ -324,7 +351,6 @@ export class GraphExplorerView extends ItemView {
   private cameraAnimationDuration = 800;
   private cameraAnimationStart: { position: [number, number, number]; up: [number, number, number] } | null = null;
   private cameraAnimationTarget: { position: [number, number, number]; up: [number, number, number] } | null = null;
-  private enableAnimations = true;
   private settings: GraphExplorerSettings;
   private pointerDownPos = { x: 0, y: 0 };
   private currentLookAt = new Vector3(0, 0, 0);
@@ -385,6 +411,12 @@ export class GraphExplorerView extends ItemView {
         glow: 0.6,
         pointOpacity: 0.95,
         nodeScale: this.settings.nodeSizeMultiplier,
+        nodeSizeMode: this.settings.nodeSizeMode,
+        nodeSizeMinScale: this.settings.nodeSizeMinScale,
+        nodeSizeMaxScale: this.settings.nodeSizeMaxScale,
+        nodeSizeIncomingWeight: this.settings.nodeSizeIncomingWeight,
+        nodeSizeOutgoingWeight: this.settings.nodeSizeOutgoingWeight,
+        nodeSizeCurve: this.settings.nodeSizeCurve,
         showLinks: this.settings.showLinks,
       },
     };
@@ -397,7 +429,7 @@ export class GraphExplorerView extends ItemView {
   applySettings(settings: GraphExplorerSettings): void {
     this.settings = settings;
     this.state.themeId = settings.theme;
-    this.state.graph.nodeScale = settings.nodeSizeMultiplier;
+    this.applyNodeSizingStateFromSettings();
     this.state.graph.showLinks = settings.showLinks;
     if (this.themeSelectEl) {
       this.themeSelectEl.value = settings.theme;
@@ -410,6 +442,11 @@ export class GraphExplorerView extends ItemView {
     this.updateLinkForceDisplay();
     this.updateLinkDistanceDisplay();
     this.updateNodeSizeDisplay();
+    this.updateNodeSizeMinScaleDisplay();
+    this.updateNodeSizeMaxScaleDisplay();
+    this.updateNodeSizeIncomingWeightDisplay();
+    this.updateNodeSizeOutgoingWeightDisplay();
+    this.updateNodeSizingControlAvailability();
     this.updateLabelMinFontDisplay();
     this.updateLabelMaxFontDisplay();
     this.updateLabelDensityDisplay();
@@ -442,10 +479,13 @@ export class GraphExplorerView extends ItemView {
     if (this.labelShowEmojiToggleEl) {
       this.labelShowEmojiToggleEl.checked = settings.labelShowEmoji;
     }
-    this.updateLabelMinFontDisplay();
-    this.updateLabelMaxFontDisplay();
-    this.updateLabelDensityDisplay();
-    this.updatePinnedImportantDisplay();
+    if (this.nodeSizeModeSelectEl) {
+      this.nodeSizeModeSelectEl.value = settings.nodeSizeMode;
+    }
+    if (this.nodeSizeCurveSelectEl) {
+      this.nodeSizeCurveSelectEl.value = settings.nodeSizeCurve;
+    }
+    this.updateNodeSizingControlAvailability();
     this.syncRendererPerformanceProfile();
     this.updateTheme();
     this.updateLabelPresentation();
@@ -582,8 +622,8 @@ export class GraphExplorerView extends ItemView {
     this.autoRotateBtn = createIconButton('play', () => {
       this.toggleAutoRotate();
     }, {
-      title: 'Toggle auto rotation',
-      ariaLabel: 'Toggle auto rotation',
+      title: 'Play or pause auto rotation',
+      ariaLabel: 'Play or pause auto rotation',
     });
 
     const sliceBtn = createButton('Slice', () => {
@@ -733,6 +773,35 @@ export class GraphExplorerView extends ItemView {
     void this.plugin.handleVisualSettingChange(visualSettingRefreshOptions(action));
   }
 
+  private applyNodeSizingStateFromSettings(): void {
+    this.state.graph.nodeScale = this.settings.nodeSizeMultiplier;
+    this.state.graph.nodeSizeMode = this.settings.nodeSizeMode;
+    this.state.graph.nodeSizeMinScale = this.settings.nodeSizeMinScale;
+    this.state.graph.nodeSizeMaxScale = this.settings.nodeSizeMaxScale;
+    this.state.graph.nodeSizeIncomingWeight = this.settings.nodeSizeIncomingWeight;
+    this.state.graph.nodeSizeOutgoingWeight = this.settings.nodeSizeOutgoingWeight;
+    this.state.graph.nodeSizeCurve = this.settings.nodeSizeCurve;
+  }
+
+  private updateNodeSizingControlAvailability(): void {
+    const proportionalMode = this.settings.nodeSizeMode === 'connections';
+    if (this.nodeSizeMinScaleSliderEl) {
+      this.nodeSizeMinScaleSliderEl.disabled = !proportionalMode;
+    }
+    if (this.nodeSizeMaxScaleSliderEl) {
+      this.nodeSizeMaxScaleSliderEl.disabled = !proportionalMode;
+    }
+    if (this.nodeSizeIncomingWeightSliderEl) {
+      this.nodeSizeIncomingWeightSliderEl.disabled = !proportionalMode;
+    }
+    if (this.nodeSizeOutgoingWeightSliderEl) {
+      this.nodeSizeOutgoingWeightSliderEl.disabled = !proportionalMode;
+    }
+    if (this.nodeSizeCurveSelectEl) {
+      this.nodeSizeCurveSelectEl.disabled = !proportionalMode;
+    }
+  }
+
   private normalizeNumber(value: unknown, fallback: number, min: number, max: number): number {
     const resolved = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
     return Math.min(max, Math.max(min, resolved));
@@ -771,6 +840,14 @@ export class GraphExplorerView extends ItemView {
     const source = input ?? {};
     const themeOptions = new Set(this.themeCycle.map((theme) => theme.id));
     const fontOptions = new Set(Object.keys(GraphExplorerView.FONT_STACKS));
+    const nodeSizeMode = source.nodeSizeMode === 'connections' || source.nodeSizeMode === 'fixed'
+      ? source.nodeSizeMode
+      : BUILTIN_PRESET_BASE.nodeSizeMode;
+    const nodeSizeCurve = source.nodeSizeCurve === 'linear' || source.nodeSizeCurve === 'sqrt' || source.nodeSizeCurve === 'log'
+      ? source.nodeSizeCurve
+      : BUILTIN_PRESET_BASE.nodeSizeCurve;
+    const nodeSizeMinScale = this.normalizeNumber(source.nodeSizeMinScale, BUILTIN_PRESET_BASE.nodeSizeMinScale, 0.2, 3.5);
+    const nodeSizeMaxScale = this.normalizeNumber(source.nodeSizeMaxScale, BUILTIN_PRESET_BASE.nodeSizeMaxScale, nodeSizeMinScale + 0.05, 4.5);
     const labelRankingMode = source.labelRankingMode === 'depth' || source.labelRankingMode === 'importance' || source.labelRankingMode === 'hybrid'
       ? source.labelRankingMode
       : BUILTIN_PRESET_BASE.labelRankingMode;
@@ -789,6 +866,12 @@ export class GraphExplorerView extends ItemView {
       linkForce: this.normalizeNumber(source.linkForce, BUILTIN_PRESET_BASE.linkForce, 0, 4),
       linkDistance: this.normalizeNumber(source.linkDistance, BUILTIN_PRESET_BASE.linkDistance, 0.2, 6),
       nodeSizeMultiplier: this.normalizeNumber(source.nodeSizeMultiplier, BUILTIN_PRESET_BASE.nodeSizeMultiplier, 0.4, 3),
+      nodeSizeMode,
+      nodeSizeMinScale,
+      nodeSizeMaxScale,
+      nodeSizeIncomingWeight: this.normalizeNumber(source.nodeSizeIncomingWeight, BUILTIN_PRESET_BASE.nodeSizeIncomingWeight, 0, 2.5),
+      nodeSizeOutgoingWeight: this.normalizeNumber(source.nodeSizeOutgoingWeight, BUILTIN_PRESET_BASE.nodeSizeOutgoingWeight, 0, 2.5),
+      nodeSizeCurve,
       showLinks: this.normalizeBoolean(source.showLinks, BUILTIN_PRESET_BASE.showLinks),
       autoPerformanceMode: this.normalizeBoolean(source.autoPerformanceMode, BUILTIN_PRESET_BASE.autoPerformanceMode),
       labelRankingMode,
@@ -820,6 +903,12 @@ export class GraphExplorerView extends ItemView {
       linkForce: this.settings.linkForce,
       linkDistance: this.settings.linkDistance,
       nodeSizeMultiplier: this.settings.nodeSizeMultiplier,
+      nodeSizeMode: this.settings.nodeSizeMode,
+      nodeSizeMinScale: this.settings.nodeSizeMinScale,
+      nodeSizeMaxScale: this.settings.nodeSizeMaxScale,
+      nodeSizeIncomingWeight: this.settings.nodeSizeIncomingWeight,
+      nodeSizeOutgoingWeight: this.settings.nodeSizeOutgoingWeight,
+      nodeSizeCurve: this.settings.nodeSizeCurve,
       showLinks: this.settings.showLinks,
       autoPerformanceMode: this.settings.autoPerformanceMode,
       labelRankingMode: this.settings.labelRankingMode,
@@ -1282,7 +1371,7 @@ export class GraphExplorerView extends ItemView {
         id: speedId,
         type: 'range',
         min: '0',
-        max: '1.5',
+        max: AUTO_ROTATE_MAX_SPEED.toString(),
         step: '0.01',
         value: this.state.autoSpeed.toFixed(2),
       },
@@ -1294,20 +1383,6 @@ export class GraphExplorerView extends ItemView {
       this.updateSpeedDisplay();
     });
     this.autoSpeedValueEl = speedControl.createEl('span', { cls: 'hyper-config-value' });
-
-    const animationsRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
-    const animationsId = `hyper-animations-${uniqueSuffix}`;
-    animationsRow.createEl('label', { text: 'Enable animations', attr: { for: animationsId } });
-    const animationsToggle = animationsRow.createEl('input', {
-      attr: {
-        id: animationsId,
-        type: 'checkbox',
-      },
-    });
-    animationsToggle.checked = this.enableAnimations;
-    animationsToggle.addEventListener('change', (event) => {
-      this.enableAnimations = (event.target as HTMLInputElement).checked;
-    });
 
     // Force layout settings
     body.createEl('h4', { text: 'Force Layout' });
@@ -1425,11 +1500,148 @@ export class GraphExplorerView extends ItemView {
       const value = Number((event.target as HTMLInputElement).value);
       if (!Number.isFinite(value)) return;
       this.settings.nodeSizeMultiplier = value;
-      this.state.graph.nodeScale = value;
+      this.applyNodeSizingStateFromSettings();
       this.notifyVisualSettingChange('node-size');
       this.updateNodeSizeDisplay();
     });
     this.nodeSizeValueEl = nodeSizeControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const nodeSizeModeRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeModeId = `hyper-node-size-mode-${uniqueSuffix}`;
+    nodeSizeModeRow.createEl('label', { text: 'Node sizing mode', attr: { for: nodeSizeModeId } });
+    this.nodeSizeModeSelectEl = nodeSizeModeRow.createEl('select', { attr: { id: nodeSizeModeId } });
+    [
+      { id: 'fixed', label: 'Fixed size' },
+      { id: 'connections', label: 'Connections (in/out)' },
+    ].forEach((option) => createOption(this.nodeSizeModeSelectEl, option));
+    this.nodeSizeModeSelectEl.value = this.settings.nodeSizeMode;
+    this.nodeSizeModeSelectEl.addEventListener('change', () => {
+      this.settings.nodeSizeMode = this.nodeSizeModeSelectEl.value as GraphExplorerSettings['nodeSizeMode'];
+      this.applyNodeSizingStateFromSettings();
+      this.updateNodeSizingControlAvailability();
+      this.notifyVisualSettingChange('node-size');
+    });
+
+    const nodeSizeMinScaleRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeMinScaleId = `hyper-node-size-min-scale-${uniqueSuffix}`;
+    nodeSizeMinScaleRow.createEl('label', { text: 'Min proportional scale', attr: { for: nodeSizeMinScaleId } });
+    const nodeSizeMinScaleControl = nodeSizeMinScaleRow.createDiv({ cls: 'hyper-config-control' });
+    this.nodeSizeMinScaleSliderEl = nodeSizeMinScaleControl.createEl('input', {
+      attr: {
+        id: nodeSizeMinScaleId,
+        type: 'range',
+        min: '0.2',
+        max: '3.5',
+        step: '0.05',
+        value: this.settings.nodeSizeMinScale.toFixed(2),
+      },
+    });
+    this.nodeSizeMinScaleSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.nodeSizeMinScale = value;
+      if (this.settings.nodeSizeMaxScale < value + 0.05) {
+        this.settings.nodeSizeMaxScale = value + 0.05;
+      }
+      this.applyNodeSizingStateFromSettings();
+      this.updateNodeSizeMinScaleDisplay();
+      this.updateNodeSizeMaxScaleDisplay();
+      this.notifyVisualSettingChange('node-size');
+    });
+    this.nodeSizeMinScaleValueEl = nodeSizeMinScaleControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const nodeSizeMaxScaleRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeMaxScaleId = `hyper-node-size-max-scale-${uniqueSuffix}`;
+    nodeSizeMaxScaleRow.createEl('label', { text: 'Max proportional scale', attr: { for: nodeSizeMaxScaleId } });
+    const nodeSizeMaxScaleControl = nodeSizeMaxScaleRow.createDiv({ cls: 'hyper-config-control' });
+    this.nodeSizeMaxScaleSliderEl = nodeSizeMaxScaleControl.createEl('input', {
+      attr: {
+        id: nodeSizeMaxScaleId,
+        type: 'range',
+        min: '0.3',
+        max: '4.5',
+        step: '0.05',
+        value: this.settings.nodeSizeMaxScale.toFixed(2),
+      },
+    });
+    this.nodeSizeMaxScaleSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.nodeSizeMaxScale = value;
+      if (this.settings.nodeSizeMinScale > value - 0.05) {
+        this.settings.nodeSizeMinScale = Math.max(0.2, value - 0.05);
+      }
+      this.applyNodeSizingStateFromSettings();
+      this.updateNodeSizeMinScaleDisplay();
+      this.updateNodeSizeMaxScaleDisplay();
+      this.notifyVisualSettingChange('node-size');
+    });
+    this.nodeSizeMaxScaleValueEl = nodeSizeMaxScaleControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const nodeSizeIncomingWeightRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeIncomingWeightId = `hyper-node-size-in-weight-${uniqueSuffix}`;
+    nodeSizeIncomingWeightRow.createEl('label', { text: 'Incoming weight', attr: { for: nodeSizeIncomingWeightId } });
+    const nodeSizeIncomingWeightControl = nodeSizeIncomingWeightRow.createDiv({ cls: 'hyper-config-control' });
+    this.nodeSizeIncomingWeightSliderEl = nodeSizeIncomingWeightControl.createEl('input', {
+      attr: {
+        id: nodeSizeIncomingWeightId,
+        type: 'range',
+        min: '0',
+        max: '2.5',
+        step: '0.05',
+        value: this.settings.nodeSizeIncomingWeight.toFixed(2),
+      },
+    });
+    this.nodeSizeIncomingWeightSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.nodeSizeIncomingWeight = value;
+      this.applyNodeSizingStateFromSettings();
+      this.updateNodeSizeIncomingWeightDisplay();
+      this.notifyVisualSettingChange('node-size');
+    });
+    this.nodeSizeIncomingWeightValueEl = nodeSizeIncomingWeightControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const nodeSizeOutgoingWeightRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeOutgoingWeightId = `hyper-node-size-out-weight-${uniqueSuffix}`;
+    nodeSizeOutgoingWeightRow.createEl('label', { text: 'Outgoing weight', attr: { for: nodeSizeOutgoingWeightId } });
+    const nodeSizeOutgoingWeightControl = nodeSizeOutgoingWeightRow.createDiv({ cls: 'hyper-config-control' });
+    this.nodeSizeOutgoingWeightSliderEl = nodeSizeOutgoingWeightControl.createEl('input', {
+      attr: {
+        id: nodeSizeOutgoingWeightId,
+        type: 'range',
+        min: '0',
+        max: '2.5',
+        step: '0.05',
+        value: this.settings.nodeSizeOutgoingWeight.toFixed(2),
+      },
+    });
+    this.nodeSizeOutgoingWeightSliderEl.addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.settings.nodeSizeOutgoingWeight = value;
+      this.applyNodeSizingStateFromSettings();
+      this.updateNodeSizeOutgoingWeightDisplay();
+      this.notifyVisualSettingChange('node-size');
+    });
+    this.nodeSizeOutgoingWeightValueEl = nodeSizeOutgoingWeightControl.createEl('span', { cls: 'hyper-config-value' });
+
+    const nodeSizeCurveRow = body.createDiv({ cls: 'hyper-config-row' });
+    const nodeSizeCurveId = `hyper-node-size-curve-${uniqueSuffix}`;
+    nodeSizeCurveRow.createEl('label', { text: 'Proportional curve', attr: { for: nodeSizeCurveId } });
+    this.nodeSizeCurveSelectEl = nodeSizeCurveRow.createEl('select', { attr: { id: nodeSizeCurveId } });
+    [
+      { id: 'linear', label: 'Linear' },
+      { id: 'sqrt', label: 'Square root' },
+      { id: 'log', label: 'Logarithmic' },
+    ].forEach((option) => createOption(this.nodeSizeCurveSelectEl, option));
+    this.nodeSizeCurveSelectEl.value = this.settings.nodeSizeCurve;
+    this.nodeSizeCurveSelectEl.addEventListener('change', () => {
+      this.settings.nodeSizeCurve = this.nodeSizeCurveSelectEl.value as GraphExplorerSettings['nodeSizeCurve'];
+      this.applyNodeSizingStateFromSettings();
+      this.notifyVisualSettingChange('node-size');
+    });
+    this.updateNodeSizingControlAvailability();
 
     const showLinksRow = body.createDiv({ cls: 'hyper-config-row hyper-config-row-checkbox' });
     const showLinksId = `hyper-show-links-${uniqueSuffix}`;
@@ -2299,6 +2511,11 @@ export class GraphExplorerView extends ItemView {
       this.updateLinkForceDisplay();
       this.updateLinkDistanceDisplay();
       this.updateNodeSizeDisplay();
+      this.updateNodeSizeMinScaleDisplay();
+      this.updateNodeSizeMaxScaleDisplay();
+      this.updateNodeSizeIncomingWeightDisplay();
+      this.updateNodeSizeOutgoingWeightDisplay();
+      this.updateNodeSizingControlAvailability();
       this.updateLabelMinFontDisplay();
       this.updateLabelMaxFontDisplay();
       this.updateLabelDensityDisplay();
@@ -2457,6 +2674,34 @@ export class GraphExplorerView extends ItemView {
     this.nodeSizeValueEl.textContent = value.toFixed(2);
   }
 
+  private updateNodeSizeMinScaleDisplay() {
+    if (!this.nodeSizeMinScaleSliderEl || !this.nodeSizeMinScaleValueEl) return;
+    const value = this.settings.nodeSizeMinScale;
+    this.nodeSizeMinScaleSliderEl.value = value.toFixed(2);
+    this.nodeSizeMinScaleValueEl.textContent = `${value.toFixed(2)}x`;
+  }
+
+  private updateNodeSizeMaxScaleDisplay() {
+    if (!this.nodeSizeMaxScaleSliderEl || !this.nodeSizeMaxScaleValueEl) return;
+    const value = this.settings.nodeSizeMaxScale;
+    this.nodeSizeMaxScaleSliderEl.value = value.toFixed(2);
+    this.nodeSizeMaxScaleValueEl.textContent = `${value.toFixed(2)}x`;
+  }
+
+  private updateNodeSizeIncomingWeightDisplay() {
+    if (!this.nodeSizeIncomingWeightSliderEl || !this.nodeSizeIncomingWeightValueEl) return;
+    const value = this.settings.nodeSizeIncomingWeight;
+    this.nodeSizeIncomingWeightSliderEl.value = value.toFixed(2);
+    this.nodeSizeIncomingWeightValueEl.textContent = value.toFixed(2);
+  }
+
+  private updateNodeSizeOutgoingWeightDisplay() {
+    if (!this.nodeSizeOutgoingWeightSliderEl || !this.nodeSizeOutgoingWeightValueEl) return;
+    const value = this.settings.nodeSizeOutgoingWeight;
+    this.nodeSizeOutgoingWeightSliderEl.value = value.toFixed(2);
+    this.nodeSizeOutgoingWeightValueEl.textContent = value.toFixed(2);
+  }
+
   private updateLabelMinFontDisplay() {
     if (!this.labelMinFontSliderEl || !this.labelMinFontValueEl) return;
     const value = this.settings.labelMinFontSize;
@@ -2511,8 +2756,7 @@ export class GraphExplorerView extends ItemView {
     const targetPosition: [number, number, number] = preset.position;
     const targetUp: [number, number, number] = up;
 
-    // Animate camera transition if enabled
-    if (this.enableAnimations && options.animate !== false) {
+    if (options.animate !== false) {
       this.cameraAnimationStart = {
         position: [camera.position.x, camera.position.y, camera.position.z],
         up: [camera.up.x, camera.up.y, camera.up.z],
@@ -2553,7 +2797,7 @@ export class GraphExplorerView extends ItemView {
       this.selectNode(null, { updateDetails: true, resetFocus: true });
 
       // Cache previous vertices for animation
-      const shouldAnimate = this.enableAnimations && this.activeObject && this.activeObject.vertices.length > 0;
+      const shouldAnimate = this.activeObject && this.activeObject.vertices.length > 0;
       if (shouldAnimate) {
         this.previousVertices = this.transformedVertices.map(v => v ? [...v] as Vec4 : [0, 0, 0, 0]);
         this.animationProgress = 0;
@@ -2781,10 +3025,13 @@ export class GraphExplorerView extends ItemView {
 
     if (this.state.autoRotate) {
       const speed = this.state.autoSpeed;
+      const normalizedSpeed = Math.min(1, Math.max(0, speed / AUTO_ROTATE_MAX_SPEED));
+      // Square the normalized slider value so low settings produce significantly slower motion.
+      const effectiveSpeed = Math.pow(normalizedSpeed, AUTO_ROTATE_CURVE_EXPONENT);
       const delta = 0.016;
-      this.state.rotation.xy += 0.12 * speed * delta;
-      this.state.rotation.xw += 0.1 * speed * delta;
-      this.state.rotation.yz += 0.08 * speed * delta;
+      this.state.rotation.xy += AUTO_ROTATE_BASE_RATE_XY * effectiveSpeed * delta;
+      this.state.rotation.xw += AUTO_ROTATE_BASE_RATE_XW * effectiveSpeed * delta;
+      this.state.rotation.yz += AUTO_ROTATE_BASE_RATE_YZ * effectiveSpeed * delta;
       continueRendering = true;
     }
 
@@ -2984,8 +3231,23 @@ export class GraphExplorerView extends ItemView {
     this.lastRenderedNodeSignature = signature;
 
     this.nodeInfoEl.empty();
-    const title = this.nodeInfoEl.createEl('h2');
-    title.textContent = node.emoji ? `${node.emoji} ${node.label}` : node.label;
+    const title = this.nodeInfoEl.createEl('h2', { cls: 'hyper-node-info-title' });
+    title.textContent = node.label;
+    title.title = 'Center view on this node';
+    title.tabIndex = 0;
+    title.setAttribute('role', 'button');
+    title.setAttribute('aria-label', `Center view on ${node.label}`);
+    const focusNode = (event: Event) => {
+      event.stopPropagation();
+      this.isFocusing = true;
+      this.requestRender();
+    };
+    title.addEventListener('click', focusNode);
+    title.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      focusNode(event);
+    });
     this.nodeInfoEl.createEl('p', { text: node.summary || (isMissing ? 'Unresolved link target.' : 'No summary available yet.') });
 
     if (isMissing) {
@@ -3007,12 +3269,6 @@ export class GraphExplorerView extends ItemView {
         this.app.workspace.openLinkText(node.id, '', false);
       });
     }
-
-    const returnBtn = this.nodeInfoEl.createEl('button', { text: 'Return to Node', cls: 'hyper-node-return-btn' });
-    returnBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.isFocusing = true;
-    });
 
     this.imageStripEl.empty();
     const images = hero ? [hero, ...gallery.filter((url) => url !== hero)] : gallery;
