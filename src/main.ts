@@ -19,6 +19,12 @@ export interface GraphExplorerPresetSettings {
   linkForce: number;
   linkDistance: number;
   nodeSizeMultiplier: number;
+  nodeSizeMode: 'fixed' | 'connections';
+  nodeSizeMinScale: number;
+  nodeSizeMaxScale: number;
+  nodeSizeIncomingWeight: number;
+  nodeSizeOutgoingWeight: number;
+  nodeSizeCurve: 'linear' | 'sqrt' | 'log';
   showLinks: boolean;
   autoPerformanceMode: boolean;
   labelRankingMode: 'depth' | 'importance' | 'hybrid';
@@ -53,6 +59,12 @@ const DEFAULT_PRESET_SETTINGS: GraphExplorerPresetSettings = {
   linkForce: 0,
   linkDistance: 1.6,
   nodeSizeMultiplier: 1,
+  nodeSizeMode: 'fixed',
+  nodeSizeMinScale: 0.75,
+  nodeSizeMaxScale: 2.25,
+  nodeSizeIncomingWeight: 1,
+  nodeSizeOutgoingWeight: 1,
+  nodeSizeCurve: 'sqrt',
   showLinks: true,
   autoPerformanceMode: true,
   labelRankingMode: 'hybrid',
