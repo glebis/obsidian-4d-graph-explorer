@@ -65,6 +65,7 @@
   width: 100%;
   height: 100%;
   outline: none;
+  z-index: 0;
 }
 
 .hyper-overlay {
@@ -73,6 +74,7 @@
   pointer-events: none;
   font-family: var(--font-monospace);
   color: var(--hyper-overlay-text);
+  z-index: 100;
 }
 
 .hyper-label-layer {
@@ -155,6 +157,7 @@
   box-shadow: none;
   pointer-events: auto;
   color: var(--hyper-toolbar-text);
+  z-index: 1100;
 }
 
 .hyper-toolbar-spacer {
@@ -256,6 +259,7 @@
   border: 1px solid var(--hyper-image-strip-border);
   pointer-events: auto;
   color: var(--hyper-panel-text);
+  z-index: 1100;
 }
 
 .hyper-image-strip img {
@@ -276,17 +280,27 @@
   overflow-y: auto;
   padding: 16px;
   background: var(--hyper-panel-bg);
-  border-radius: 14px;
-  border: 1px solid var(--hyper-panel-border);
+  border-radius: 8px;
+  border: none;
   box-shadow: var(--hyper-deep-shadow);
   pointer-events: auto;
   color: var(--hyper-panel-text);
+  z-index: 1150;
 }
 
 .hyper-node-info h2 {
   margin: 0 0 8px;
   font-size: 18px;
   font-weight: 600;
+}
+
+.hyper-node-info-title {
+  cursor: pointer;
+}
+
+.hyper-node-info-title:focus-visible {
+  outline: 2px solid var(--hyper-input-accent);
+  outline-offset: 2px;
 }
 
 .hyper-node-info p {
