@@ -70,6 +70,8 @@ export class HyperRenderer {
     this.isGraph = false;
     this.graphMeta = null;
     this.graphDegrees = null;
+    this.graphIncomingDegrees = null;
+    this.graphOutgoingDegrees = null;
     this.graphAdjacency = null;
     this.graphLabelCallback = null;
     this.graphLabelPayload = null;
@@ -166,6 +168,26 @@ export class HyperRenderer {
       this.graphAdjacency = null;
       this.graphDegrees = null;
     }
+    if (this.isGraph && this.graphMeta?.links && this.graphMeta?.nodes) {
+      const nodeCount = this.graphMeta.nodes.length;
+      const incoming = new Float32Array(nodeCount);
+      const outgoing = new Float32Array(nodeCount);
+      for (let i = 0; i < this.graphMeta.links.length; i += 1) {
+        const link = this.graphMeta.links[i];
+        if (!link) continue;
+        if (Number.isInteger(link.sourceIndex) && link.sourceIndex >= 0 && link.sourceIndex < nodeCount) {
+          outgoing[link.sourceIndex] += 1;
+        }
+        if (Number.isInteger(link.targetIndex) && link.targetIndex >= 0 && link.targetIndex < nodeCount) {
+          incoming[link.targetIndex] += 1;
+        }
+      }
+      this.graphIncomingDegrees = incoming;
+      this.graphOutgoingDegrees = outgoing;
+    } else {
+      this.graphIncomingDegrees = null;
+      this.graphOutgoingDegrees = null;
+    }
     this.vertexCache3 = new Array(object.vertices.length).fill(null);
     this.lineThemeColorCache = new Float32Array(object.vertices.length * 3);
     this.lastGraphLabelPushAt = 0;
@@ -173,6 +195,72 @@ export class HyperRenderer {
     this.lastGraphVertexVisibilityRef = null;
     this.lastGraphEdgeVisibilityRef = null;
     this._buildGeometry();
+  }
+
+  _shapeConnectionScore(normalized, curve) {
+    const value = clamp(normalized, 0, 1);
+    if (curve === 'linear') {
+      return value;
+    }
+    if (curve === 'log') {
+      return Math.log1p(value * 9) / Math.log(10);
+    }
+    return Math.sqrt(value);
+  }
+
+  _computeConnectionSizeScale(graphState, vertexCount) {
+    if (
+      !graphState
+      || graphState.nodeSizeMode !== 'connections'
+      || !this.graphIncomingDegrees
+      || !this.graphOutgoingDegrees
+      || this.graphIncomingDegrees.length !== vertexCount
+      || this.graphOutgoingDegrees.length !== vertexCount
+    ) {
+      return null;
+    }
+
+    const incomingWeight = Number.isFinite(graphState.nodeSizeIncomingWeight)
+      ? Math.max(0, Number(graphState.nodeSizeIncomingWeight))
+      : 1;
+    const outgoingWeight = Number.isFinite(graphState.nodeSizeOutgoingWeight)
+      ? Math.max(0, Number(graphState.nodeSizeOutgoingWeight))
+      : 1;
+    const minScale = Number.isFinite(graphState.nodeSizeMinScale)
+      ? Math.max(0.2, Number(graphState.nodeSizeMinScale))
+      : 0.75;
+    const maxScaleRaw = Number.isFinite(graphState.nodeSizeMaxScale)
+      ? Number(graphState.nodeSizeMaxScale)
+      : 2.25;
+    const maxScale = Math.max(minScale + 0.05, maxScaleRaw);
+    const curve = graphState.nodeSizeCurve === 'linear' || graphState.nodeSizeCurve === 'log'
+      ? graphState.nodeSizeCurve
+      : 'sqrt';
+
+    const scores = new Float32Array(vertexCount);
+    let minScore = Infinity;
+    let maxScore = -Infinity;
+    for (let i = 0; i < vertexCount; i += 1) {
+      const score = this.graphIncomingDegrees[i] * incomingWeight + this.graphOutgoingDegrees[i] * outgoingWeight;
+      scores[i] = score;
+      if (score < minScore) minScore = score;
+      if (score > maxScore) maxScore = score;
+    }
+
+    const scaleByIndex = new Float32Array(vertexCount);
+    const range = maxScore - minScore;
+    if (!Number.isFinite(range) || range <= 1e-6) {
+      const fallback = clamp(1, minScale, maxScale);
+      scaleByIndex.fill(fallback);
+      return scaleByIndex;
+    }
+
+    for (let i = 0; i < vertexCount; i += 1) {
+      const normalized = (scores[i] - minScore) / range;
+      const curved = this._shapeConnectionScore(normalized, curve);
+      scaleByIndex[i] = minScale + curved * (maxScale - minScale);
+    }
+    return scaleByIndex;
   }
 
   updateTheme(theme) {
@@ -442,6 +530,9 @@ export class HyperRenderer {
     const focusColor = graphState?.focusColor ?? null;
 
     const sliceBand = Math.max(0.0001, sliceThickness / 2);
+    const connectionSizeScaleByIndex = isGraph
+      ? this._computeConnectionSizeScale(graphState, vertexCount)
+      : null;
 
     for (let i = 0; i < vertexCount; i += 1) {
       const vec4 = vertices4d[i];
@@ -502,8 +593,9 @@ export class HyperRenderer {
         if (vertexSizes) {
           const baseSize = graphMeta.vertexSizes[i];
           const scale = graphState?.nodeScale ?? 1;
+          const connectionScale = connectionSizeScaleByIndex ? connectionSizeScaleByIndex[i] : 1;
           const visibilityScale = Math.max(0.4, 0.6 + 0.4 * visibilityWeight);
-          vertexSizes[i] = baseSize * scale * visibilityScale * sizeMultiplier;
+          vertexSizes[i] = baseSize * scale * connectionScale * visibilityScale * sizeMultiplier;
         }
         if (vertexIntensity) {
           vertexIntensity[i] = Math.min(1.35, Math.max(0.08, finalWeight));
