@@ -41,6 +41,7 @@ export interface GraphNodeMeta {
   category: string;
   size: number;
   color: [number, number, number];
+  hasCustomColor: boolean;
   importance: number | null;
   summary: string;
   media: Array<unknown>;
@@ -292,6 +293,7 @@ interface NormalizedNode {
   imageUrl: string;
   thumbnailUrl: string;
   color: [number, number, number];
+  hasCustomColor: boolean;
   raw: RawGraphNode | null;
 }
 
@@ -323,15 +325,16 @@ function normalizeNode(node: RawGraphNode | null | undefined, index: number): No
   const media = Array.isArray(node.media) ? node.media : [];
   const imageUrl = node.imageUrl || '';
   const thumbnailUrl = node.thumbnailUrl || '';
+  const hasCustomColor = Number.isFinite(node.color);
 
-  // MOC nodes get a distinctive golden color
+  // Explicit user colors should win over generated colors.
   let color: [number, number, number];
   if (isMissing) {
     color = [0.96, 0.66, 0.28];
+  } else if (hasCustomColor) {
+    color = intToRgb(Number(node.color));
   } else if (isMoc) {
     color = [1.0, 0.84, 0.0]; // Golden color for MOC nodes
-  } else if (Number.isFinite(node.color)) {
-    color = lightenColor(intToRgb(Number(node.color)));
   } else {
     color = colorFromCategory(category);
   }
@@ -348,6 +351,7 @@ function normalizeNode(node: RawGraphNode | null | undefined, index: number): No
     imageUrl,
     thumbnailUrl,
     color,
+    hasCustomColor,
     raw: node,
   };
 }
@@ -460,6 +464,7 @@ function layoutNodes(normalizedNodes: NormalizedNode[]): LayoutResult {
         category: node.category,
         size: node.size,
         color: node.color,
+        hasCustomColor: node.hasCustomColor,
         importance: node.importance,
         summary: node.summary,
         media: node.media,

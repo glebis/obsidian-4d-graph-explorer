@@ -4,6 +4,10 @@ function escapeRegexChar(ch: string): string {
   return /[\\^$+?.()|[\]{}]/.test(ch) ? `\\${ch}` : ch;
 }
 
+function normalizeTag(value: string): string {
+  return value.replace(/^#/, '').trim().toLowerCase();
+}
+
 export function compileIgnorePattern(pattern: string): RegExp | null {
   if (!pattern) return null;
   let regex = '^';
@@ -36,10 +40,11 @@ export function matchColorRule(rule: ColorRule, filePath: string, tags: string[]
     if (rule.type === 'tag') {
       const patterns = rule.pattern
         .split(/[,\s]+/)
-        .map((p) => p.trim().toLowerCase())
+        .map((p) => normalizeTag(p))
         .filter((p) => p.length > 0);
+      const normalizedTags = tags.map((tag) => normalizeTag(tag));
 
-      return patterns.some((pattern) => tags.some((tag) => tag.toLowerCase() === pattern));
+      return patterns.some((pattern) => normalizedTags.some((tag) => tag === pattern));
     }
     if (rule.type === 'path') {
       if (rule.pattern.startsWith('/') && rule.pattern.lastIndexOf('/') > 0) {

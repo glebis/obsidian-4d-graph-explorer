@@ -11,6 +11,41 @@ import { getGraphLabelDispatchIntervalMs } from './graphLabelDispatch';
 const tempColor = new THREE.Color();
 const tempVec = new THREE.Vector3();
 const GRAPH_THEME_BLEND = 0.74;
+const GRAPH_POINT_ATTENUATION = 28;
+const GRAPH_POINT_MAX_SIZE = 128;
+const GRAPH_SLICE_POINT_BASE_SIZE = 0.11;
+const OBJECT_SLICE_POINT_BASE_SIZE = 0.09;
+const GRAPH_THEME_BLEND_CUSTOM = 0.18;
+const GRAPH_CUSTOM_MIN_LUMA_DARK = 0.34;
+const GRAPH_CUSTOM_MAX_LUMA_LIGHT = 0.78;
+
+function relativeLuminance(r, g, b) {
+  return r * 0.2126 + g * 0.7152 + b * 0.0722;
+}
+
+function adaptCustomNodeColorForMode(color, mode) {
+  let [r, g, b] = color;
+  const luminance = relativeLuminance(r, g, b);
+
+  if (mode === 'dark' && luminance < GRAPH_CUSTOM_MIN_LUMA_DARK) {
+    const lift = (GRAPH_CUSTOM_MIN_LUMA_DARK - luminance) / Math.max(1e-5, 1 - luminance);
+    r += (1 - r) * lift;
+    g += (1 - g) * lift;
+    b += (1 - b) * lift;
+  } else if (mode === 'light' && luminance > GRAPH_CUSTOM_MAX_LUMA_LIGHT) {
+    const pull = (luminance - GRAPH_CUSTOM_MAX_LUMA_LIGHT) / Math.max(1e-5, luminance);
+    const scale = 1 - pull;
+    r *= scale;
+    g *= scale;
+    b *= scale;
+  }
+
+  return [
+    clamp(r, 0, 1),
+    clamp(g, 0, 1),
+    clamp(b, 0, 1),
+  ];
+}
 
 const GRAPH_VERTEX_SHADER = `
   attribute float size;
@@ -22,8 +57,8 @@ const GRAPH_VERTEX_SHADER = `
     vColor = hyperColor;
     vIntensity = intensity;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    float attenuation = size * (220.0 / max(0.0001, -mvPosition.z));
-    gl_PointSize = clamp(attenuation, 1.0, 160.0);
+    float attenuation = size * (${GRAPH_POINT_ATTENUATION.toFixed(1)} / max(0.0001, -mvPosition.z));
+    gl_PointSize = clamp(attenuation, 1.0, ${GRAPH_POINT_MAX_SIZE.toFixed(1)});
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
@@ -387,7 +422,7 @@ export class HyperRenderer {
       new THREE.BufferAttribute(new Float32Array(edgeCount * 3), 3),
     );
     this.sliceMaterial = new THREE.PointsMaterial({
-      size: isGraph ? 0.11 : 0.09,
+      size: isGraph ? GRAPH_SLICE_POINT_BASE_SIZE : OBJECT_SLICE_POINT_BASE_SIZE,
       sizeAttenuation: true,
       transparent: true,
       vertexColors: true,
@@ -483,6 +518,16 @@ export class HyperRenderer {
     if (this.lines) {
       this.lines.visible = showLines;
     }
+    if (this.sliceMaterial) {
+      if (isGraph) {
+        const nodeScale = Number.isFinite(graphState?.nodeScale)
+          ? clamp(Number(graphState.nodeScale), 0.4, 3)
+          : 1;
+        this.sliceMaterial.size = GRAPH_SLICE_POINT_BASE_SIZE * nodeScale;
+      } else {
+        this.sliceMaterial.size = OBJECT_SLICE_POINT_BASE_SIZE;
+      }
+    }
 
     let sliceCount = 0;
 
@@ -533,6 +578,7 @@ export class HyperRenderer {
     const connectionSizeScaleByIndex = isGraph
       ? this._computeConnectionSizeScale(graphState, vertexCount)
       : null;
+    const themeMode = theme?.ui?.mode === 'light' ? 'light' : 'dark';
 
     for (let i = 0; i < vertexCount; i += 1) {
       const vec4 = vertices4d[i];
@@ -559,12 +605,14 @@ export class HyperRenderer {
         let colorR = baseColorR;
         let colorG = baseColorG;
         let colorB = baseColorB;
+        const hasCustomColor = graphMeta.nodes?.[i]?.hasCustomColor === true;
 
         if (theme) {
           const themedNodeColor = theme.pointColor({ normW, depth: depthNorm });
-          colorR = blendGraphChannel(colorR, themedNodeColor[0], GRAPH_THEME_BLEND);
-          colorG = blendGraphChannel(colorG, themedNodeColor[1], GRAPH_THEME_BLEND);
-          colorB = blendGraphChannel(colorB, themedNodeColor[2], GRAPH_THEME_BLEND);
+          const blendStrength = hasCustomColor ? GRAPH_THEME_BLEND_CUSTOM : GRAPH_THEME_BLEND;
+          colorR = blendGraphChannel(colorR, themedNodeColor[0], blendStrength);
+          colorG = blendGraphChannel(colorG, themedNodeColor[1], blendStrength);
+          colorB = blendGraphChannel(colorB, themedNodeColor[2], blendStrength);
         }
 
         if (isFocusNode) {
@@ -585,6 +633,10 @@ export class HyperRenderer {
             colorB *= brighten;
           }
           finalWeight *= 1 + emphasis * 0.24;
+        }
+
+        if (hasCustomColor) {
+          [colorR, colorG, colorB] = adaptCustomNodeColorForMode([colorR, colorG, colorB], themeMode);
         }
 
         vertexColors[baseIndex] = colorR * finalWeight;

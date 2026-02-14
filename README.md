@@ -7,6 +7,7 @@ Explore your Obsidian knowledge graph in four dimensions. This plugin renders yo
 - **4D graph visualization** -- notes are positioned in four-dimensional space and projected to 3D/2D in real time via WebGL
 - **Force-directed layout** -- configurable repel, center, link, and distance forces shape the graph organically
 - **Color themes** -- multiple built-in palettes (neon, heat, etc.) with per-node color rules based on tags, paths, or filenames
+- **Node sizing modes** -- fixed and connection-weighted sizing with live preview while adjusting controls
 - **Graph insights** -- analysis modal with cluster diagnostics, plain-language explanations, and note actions
 - **Viewport controls** -- zoom, rotation, and 4D camera manipulation
 - **Active file tracking** -- highlights the currently open note in the graph
@@ -36,7 +37,7 @@ Copy the built `main.js`, `manifest.json`, and `styles.css` to your vault's plug
 
 Open the graph with the ribbon icon or the command palette: **Open 4D Graph Explorer**.
 
-The graph opens in a side panel. Use the config panel (gear icon) to adjust forces, toggle links, change themes, and add color rules.
+The graph opens in a side panel. Use the config panel (gear icon) to adjust forces, tune node sizing, toggle links, change themes, and add color rules.
 Use the toolbar play/pause control to start or stop auto-rotation.
 
 ## Development

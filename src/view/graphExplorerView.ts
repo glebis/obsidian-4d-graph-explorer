@@ -207,6 +207,17 @@ const BUILTIN_PRESET_DEFINITIONS: Array<{ name: string; settings: Partial<GraphE
   { name: 'Quiet Presentation', settings: { showLinks: false, labelShowChrome: false, labelShowEmoji: false, theme: 'mono', autoPerformanceMode: false } },
   { name: 'Contrast Study', settings: { theme: 'neon', labelFont: 'jetbrains-mono', labelShowChrome: true, labelDensity: 1.05, nodeSizeMultiplier: 1.25 } },
   { name: 'Archive Overview', settings: { showOnlyExistingFiles: false, showLinks: true, repelForce: 2.8, centerForce: 0.08, linkForce: 0.36, linkDistance: 2.9, theme: 'daylight' } },
+  { name: 'Connection Hubs', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'sqrt', nodeSizeMinScale: 0.6, nodeSizeMaxScale: 3.2, nodeSizeIncomingWeight: 1, nodeSizeOutgoingWeight: 1, nodeSizeMultiplier: 1.05, showLinks: true, linkForce: 1.15, linkDistance: 1.2, theme: 'heat' } },
+  { name: 'Inbound Authorities', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'log', nodeSizeMinScale: 0.55, nodeSizeMaxScale: 3.4, nodeSizeIncomingWeight: 2.2, nodeSizeOutgoingWeight: 0.3, nodeSizeMultiplier: 1.12, showLinks: true, linkForce: 0.95, linkDistance: 1.5, labelScaleSource: 'importance', theme: 'daylight' } },
+  { name: 'Outbound Broadcasters', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'log', nodeSizeMinScale: 0.55, nodeSizeMaxScale: 3.4, nodeSizeIncomingWeight: 0.3, nodeSizeOutgoingWeight: 2.2, nodeSizeMultiplier: 1.08, showLinks: true, linkForce: 0.95, linkDistance: 1.5, labelScaleSource: 'importance', theme: 'neon' } },
+  { name: 'Linear Degree Ramp', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'linear', nodeSizeMinScale: 0.7, nodeSizeMaxScale: 2.8, nodeSizeIncomingWeight: 1, nodeSizeOutgoingWeight: 1, nodeSizeMultiplier: 1, showLinks: true, linkForce: 0.8, linkDistance: 1.8, theme: 'pastel' } },
+  { name: 'Core vs Fringe', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'sqrt', nodeSizeMinScale: 0.35, nodeSizeMaxScale: 3.9, nodeSizeIncomingWeight: 1.4, nodeSizeOutgoingWeight: 1.4, nodeSizeMultiplier: 1.16, showLinks: true, linkForce: 1.35, linkDistance: 1.05, repelForce: 0.95, centerForce: 0.12, theme: 'heat' } },
+  { name: 'Subtle Degree Weighting', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'sqrt', nodeSizeMinScale: 0.9, nodeSizeMaxScale: 1.7, nodeSizeIncomingWeight: 1, nodeSizeOutgoingWeight: 1, nodeSizeMultiplier: 1, showLinks: true, linkForce: 0.6, linkDistance: 1.9, theme: 'mono' } },
+  { name: 'Linkless Bubble Map', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'sqrt', nodeSizeMinScale: 0.75, nodeSizeMaxScale: 3.1, nodeSizeIncomingWeight: 1.3, nodeSizeOutgoingWeight: 1.3, nodeSizeMultiplier: 1.25, showLinks: false, labelDensity: 1.1, labelPinnedImportantCount: 10, theme: 'daylight' } },
+  { name: 'Tethered Connections', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'sqrt', nodeSizeMinScale: 0.5, nodeSizeMaxScale: 2.9, nodeSizeIncomingWeight: 1, nodeSizeOutgoingWeight: 1, nodeSizeMultiplier: 0.95, showLinks: true, linkForce: 2.35, linkDistance: 0.75, centerForce: 0.18, theme: 'neon' } },
+  { name: 'Elastic Connections', settings: { nodeSizeMode: 'connections', nodeSizeCurve: 'log', nodeSizeMinScale: 0.6, nodeSizeMaxScale: 3.5, nodeSizeIncomingWeight: 0.9, nodeSizeOutgoingWeight: 1.1, nodeSizeMultiplier: 1.04, showLinks: true, linkForce: 0.22, linkDistance: 4.8, repelForce: 3.2, centerForce: 0.04, theme: 'pastel' } },
+  { name: 'Micro Nodes + Links', settings: { nodeSizeMode: 'fixed', nodeSizeMultiplier: 0.5, showLinks: true, linkForce: 1.7, linkDistance: 0.85, labelDensity: 0.8, theme: 'mono' } },
+  { name: 'Macro Nodes + Sparse Links', settings: { nodeSizeMode: 'fixed', nodeSizeMultiplier: 2.45, showLinks: true, linkForce: 0.3, linkDistance: 3.8, labelDensity: 1.2, theme: 'daylight' } },
 ];
 
 function cloneColorRules(colorRules: ColorRule[]): ColorRule[] {
@@ -1501,6 +1512,7 @@ export class GraphExplorerView extends ItemView {
       if (!Number.isFinite(value)) return;
       this.settings.nodeSizeMultiplier = value;
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.notifyVisualSettingChange('node-size');
       this.updateNodeSizeDisplay();
     });
@@ -1518,6 +1530,7 @@ export class GraphExplorerView extends ItemView {
     this.nodeSizeModeSelectEl.addEventListener('change', () => {
       this.settings.nodeSizeMode = this.nodeSizeModeSelectEl.value as GraphExplorerSettings['nodeSizeMode'];
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.updateNodeSizingControlAvailability();
       this.notifyVisualSettingChange('node-size');
     });
@@ -1544,6 +1557,7 @@ export class GraphExplorerView extends ItemView {
         this.settings.nodeSizeMaxScale = value + 0.05;
       }
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.updateNodeSizeMinScaleDisplay();
       this.updateNodeSizeMaxScaleDisplay();
       this.notifyVisualSettingChange('node-size');
@@ -1572,6 +1586,7 @@ export class GraphExplorerView extends ItemView {
         this.settings.nodeSizeMinScale = Math.max(0.2, value - 0.05);
       }
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.updateNodeSizeMinScaleDisplay();
       this.updateNodeSizeMaxScaleDisplay();
       this.notifyVisualSettingChange('node-size');
@@ -1597,6 +1612,7 @@ export class GraphExplorerView extends ItemView {
       if (!Number.isFinite(value)) return;
       this.settings.nodeSizeIncomingWeight = value;
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.updateNodeSizeIncomingWeightDisplay();
       this.notifyVisualSettingChange('node-size');
     });
@@ -1621,6 +1637,7 @@ export class GraphExplorerView extends ItemView {
       if (!Number.isFinite(value)) return;
       this.settings.nodeSizeOutgoingWeight = value;
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.updateNodeSizeOutgoingWeightDisplay();
       this.notifyVisualSettingChange('node-size');
     });
@@ -1639,6 +1656,7 @@ export class GraphExplorerView extends ItemView {
     this.nodeSizeCurveSelectEl.addEventListener('change', () => {
       this.settings.nodeSizeCurve = this.nodeSizeCurveSelectEl.value as GraphExplorerSettings['nodeSizeCurve'];
       this.applyNodeSizingStateFromSettings();
+      this.requestRender();
       this.notifyVisualSettingChange('node-size');
     });
     this.updateNodeSizingControlAvailability();
